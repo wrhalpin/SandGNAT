@@ -28,7 +28,13 @@ from dataclasses import asdict, dataclass, field
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Job modes. Guests refuse manifests whose `mode` they don't implement so
+# we can't accidentally hand a static-analysis job to a Windows detonation
+# guest (or vice versa).
+MODE_DETONATION = "detonation"
+MODE_STATIC_ANALYSIS = "static_analysis"
 
 # Sentinel filenames — kept as module constants so host and guest cannot drift.
 MANIFEST_FILENAME = "job.json"
@@ -38,6 +44,11 @@ PROCMON_CSV = "procmon.csv"
 PCAP_FILE = "capture.pcap"
 REGSHOT_DIFF = "regshot_diff.txt"
 DROPPED_DIR = "dropped"
+
+# Static-analysis output filenames (Linux guest -> host).
+STATIC_ANALYSIS_JSON = "static_analysis.json"
+TRIGRAMS_BYTE_BIN = "trigrams_byte.bin"
+TRIGRAMS_OPCODE_BIN = "trigrams_opcode.bin"
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +75,27 @@ class CaptureConfig:
 
 
 @dataclass(slots=True)
+class StaticAnalysisOptions:
+    """Per-job knobs for the Linux static-analysis guest.
+
+    Tools that aren't installed on the guest are simply skipped — the guest
+    reports per-tool outcomes back in the result envelope.
+    """
+
+    pe_elf: bool = True
+    fuzzy_hashes: bool = True
+    strings_entropy: bool = True
+    yara_deep: bool = True
+    capa: bool = True
+    trigrams_byte: bool = True
+    trigrams_opcode: bool = True
+    # Cap per-tool wallclock to keep one runaway tool from starving the job.
+    per_tool_timeout_seconds: int = 120
+    # Hard cap on how many bytes of raw strings to keep in the envelope.
+    max_strings_bytes: int = 1024 * 1024
+
+
+@dataclass(slots=True)
 class JobManifest:
     schema_version: int
     job_id: str
@@ -72,7 +104,9 @@ class JobManifest:
     sample_name: str
     arguments: list[str] = field(default_factory=list)
     timeout_seconds: int = 300
+    mode: str = MODE_DETONATION
     capture: CaptureConfig = field(default_factory=CaptureConfig)
+    static: StaticAnalysisOptions = field(default_factory=StaticAnalysisOptions)
 
     def to_json(self) -> str:
         payload = asdict(self)
@@ -86,7 +120,8 @@ class JobManifest:
                 f"Unsupported job manifest schema_version: {data.get('schema_version')!r}"
             )
         capture = CaptureConfig(**data.pop("capture", {}))
-        return cls(capture=capture, **data)
+        static = StaticAnalysisOptions(**data.pop("static", {}))
+        return cls(capture=capture, static=static, **data)
 
 
 # ---------------------------------------------------------------------------
@@ -130,11 +165,17 @@ class ResultEnvelope:
     sample_pid: int | None
     sample_exit_code: int | None
     timed_out: bool
+    mode: str = MODE_DETONATION
     captures: list[CaptureOutcome] = field(default_factory=list)
     dropped_files: list[DroppedFileRecord] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     # Free-form metadata: detected evasion attempts, evasion strings seen, etc.
     flags: dict[str, Any] = field(default_factory=dict)
+    # Static-analysis summary: present only when mode == 'static_analysis'.
+    # The full envelope JSON lives at completed/{job_id}/static_analysis.json;
+    # this field carries just the highlights (file_format, hashes, packed flag)
+    # so the host can make decisions without re-reading the larger blob.
+    static_summary: dict[str, Any] | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, sort_keys=True)
@@ -159,6 +200,11 @@ class ResultEnvelope:
 def guest_sample_path(job_id: str, sample_name: str) -> str:
     """Deterministic in-guest path for a sample. Windows-style."""
     return str(PureWindowsPath(f"C:/sandgnat/{job_id}/{sample_name}"))
+
+
+def linux_guest_sample_path(job_id: str, sample_name: str) -> str:
+    """Deterministic in-guest path for a sample on the Linux static-analysis VM."""
+    return f"/srv/sandgnat/samples/{job_id}/{sample_name}"
 
 
 def staging_subpath(kind: str, job_id: str) -> PurePosixPath:

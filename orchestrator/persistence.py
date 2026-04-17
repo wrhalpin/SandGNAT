@@ -19,10 +19,13 @@ from .models import (
     AuditEvent,
     DroppedFile,
     JobStatus,
+    LineageEdge,
     NetworkIOC,
     RegistryModification,
+    StaticAnalysisRow,
     VmLease,
 )
+from .trigrams import MinHashSignature, NUM_BANDS
 
 
 # ---------------------------------------------------------------------------
@@ -463,15 +466,17 @@ class PostgresPoolStore:
         node: str,
         analysis_id: UUID,
         stale_after_seconds: int,
+        guest_type: str = "windows",
     ) -> bool:
         with connection() as conn, conn.cursor() as cur:
             cur.execute(
                 f"""
-                INSERT INTO vm_pool_leases (vmid, node, analysis_id, status)
-                VALUES (%s, %s, %s, 'leased')
+                INSERT INTO vm_pool_leases (vmid, node, analysis_id, status, guest_type)
+                VALUES (%s, %s, %s, 'leased', %s)
                 ON CONFLICT (vmid) DO UPDATE
                     SET analysis_id  = EXCLUDED.analysis_id,
                         node         = EXCLUDED.node,
+                        guest_type   = EXCLUDED.guest_type,
                         status       = 'leased',
                         acquired_at  = now(),
                         heartbeat_at = now(),
@@ -481,7 +486,7 @@ class PostgresPoolStore:
                           now() - INTERVAL '{int(stale_after_seconds)} seconds'
                 RETURNING vmid
                 """,
-                (vmid, node, analysis_id),
+                (vmid, node, analysis_id, guest_type),
             )
             return cur.fetchone() is not None
 
@@ -523,7 +528,7 @@ class PostgresPoolStore:
         with connection() as conn, conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT vmid, node, analysis_id, status,
+                SELECT vmid, node, analysis_id, status, guest_type,
                        acquired_at, heartbeat_at, released_at
                   FROM vm_pool_leases
                  WHERE status = 'leased'
@@ -535,9 +540,10 @@ class PostgresPoolStore:
                     node=row[1],
                     analysis_id=row[2],
                     status=row[3],
-                    acquired_at=row[4],
-                    heartbeat_at=row[5],
-                    released_at=row[6],
+                    guest_type=row[4],
+                    acquired_at=row[5],
+                    heartbeat_at=row[6],
+                    released_at=row[7],
                 )
                 for row in cur.fetchall()
             ]
@@ -555,3 +561,277 @@ class PostgresPoolStore:
                 """
             )
             return [row[0] for row in cur.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# Static analysis + trigrams + similarity + lineage
+# ---------------------------------------------------------------------------
+
+def insert_static_analysis(row: StaticAnalysisRow) -> None:
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO static_analysis (
+                analysis_id, file_format, architecture, entry_point,
+                is_packed_heuristic, section_count, overall_entropy,
+                imports, exports, sections, strings_summary,
+                capa_capabilities, deep_yara_matches, raw_envelope
+            ) VALUES (
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s
+            )
+            ON CONFLICT (analysis_id) DO UPDATE SET
+                file_format          = EXCLUDED.file_format,
+                architecture         = EXCLUDED.architecture,
+                entry_point          = EXCLUDED.entry_point,
+                is_packed_heuristic  = EXCLUDED.is_packed_heuristic,
+                section_count        = EXCLUDED.section_count,
+                overall_entropy      = EXCLUDED.overall_entropy,
+                imports              = EXCLUDED.imports,
+                exports              = EXCLUDED.exports,
+                sections             = EXCLUDED.sections,
+                strings_summary      = EXCLUDED.strings_summary,
+                capa_capabilities    = EXCLUDED.capa_capabilities,
+                deep_yara_matches    = EXCLUDED.deep_yara_matches,
+                raw_envelope         = EXCLUDED.raw_envelope,
+                completed_at         = now()
+            """,
+            (
+                row.analysis_id,
+                row.file_format,
+                row.architecture,
+                row.entry_point,
+                row.is_packed_heuristic,
+                row.section_count,
+                row.overall_entropy,
+                Jsonb(row.imports) if row.imports is not None else None,
+                Jsonb(row.exports) if row.exports is not None else None,
+                Jsonb(row.sections),
+                Jsonb(row.strings_summary) if row.strings_summary is not None else None,
+                Jsonb(row.capa_capabilities),
+                list(row.deep_yara_matches),
+                Jsonb(row.raw_envelope),
+            ),
+        )
+
+
+def update_job_static_fingerprint(
+    job_id: UUID,
+    *,
+    imphash: str | None,
+    ssdeep: str | None,
+    tlsh: str | None,
+) -> None:
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE analysis_jobs
+               SET imphash              = COALESCE(%s, imphash),
+                   ssdeep               = COALESCE(%s, ssdeep),
+                   tlsh                 = COALESCE(%s, tlsh),
+                   static_completed_at  = now()
+             WHERE id = %s
+            """,
+            (imphash, ssdeep, tlsh, job_id),
+        )
+
+
+def mark_near_duplicate(
+    job_id: UUID, parent_id: UUID, score: float
+) -> None:
+    """Stamp the job as a near-duplicate of `parent_id` and add a lineage edge."""
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE analysis_jobs
+               SET near_duplicate_of    = %s,
+                   near_duplicate_score = %s,
+                   intake_decision      = 'near_duplicate'
+             WHERE id = %s
+            """,
+            (parent_id, round(score, 3), job_id),
+        )
+        cur.execute(
+            """
+            INSERT INTO analysis_lineage (
+                child_analysis_id, parent_analysis_id, relation, similarity_score
+            ) VALUES (%s, %s, 'near_duplicate', %s)
+            ON CONFLICT (child_analysis_id) DO UPDATE
+                SET parent_analysis_id = EXCLUDED.parent_analysis_id,
+                    relation           = EXCLUDED.relation,
+                    similarity_score   = EXCLUDED.similarity_score,
+                    created_at         = now()
+            """,
+            (job_id, parent_id, round(score, 3)),
+        )
+
+
+def insert_lineage(edge: LineageEdge) -> None:
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO analysis_lineage (
+                child_analysis_id, parent_analysis_id, relation, similarity_score
+            ) VALUES (%s, %s, %s, %s)
+            ON CONFLICT (child_analysis_id) DO UPDATE
+                SET parent_analysis_id = EXCLUDED.parent_analysis_id,
+                    relation           = EXCLUDED.relation,
+                    similarity_score   = EXCLUDED.similarity_score,
+                    created_at         = now()
+            """,
+            (
+                edge.child_analysis_id,
+                edge.parent_analysis_id,
+                edge.relation,
+                edge.similarity_score,
+            ),
+        )
+
+
+class PostgresSimilarityStore:
+    """Postgres backing for `similarity.SimilarityStore`.
+
+    Signatures live in `sample_trigrams`; bands live in `sample_minhash_bands`
+    indexed for cheap candidate lookup; cached pairwise scores live in
+    `sample_similarity` with the canonical `left < right` ordering enforced
+    by a CHECK constraint.
+    """
+
+    def candidate_ids(self, flavour: str, bands: list[bytes]) -> set[UUID]:
+        if not bands:
+            return set()
+        # Build a single multi-row IN-list for the (band_index, band_value)
+        # pairs so the index can serve them all at once.
+        params: list[Any] = [flavour]
+        clauses: list[str] = []
+        for idx, value in enumerate(bands):
+            clauses.append("(band_index = %s AND band_value = %s)")
+            params.extend([idx, value])
+        sql = (
+            "SELECT DISTINCT analysis_id FROM sample_minhash_bands "
+            "WHERE flavour = %s AND (" + " OR ".join(clauses) + ")"
+        )
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(sql, params)
+            return {row[0] for row in cur.fetchall()}
+
+    def load_signature(
+        self, analysis_id: UUID, flavour: str
+    ) -> tuple[str, MinHashSignature] | None:
+        column = "byte_minhash" if flavour == "byte" else "opcode_minhash"
+        count_col = "byte_trigram_count" if flavour == "byte" else "opcode_trigram_count"
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT sample_sha256, {column}, {count_col}, signature_version
+                  FROM sample_trigrams
+                 WHERE analysis_id = %s
+                """,
+                (analysis_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        sha, blob, cardinality, version = row
+        if blob is None:
+            return None
+        return sha, MinHashSignature.from_bytes(
+            bytes(blob), cardinality=cardinality or 0, version=version
+        )
+
+    def store_signature(
+        self,
+        analysis_id: UUID,
+        sample_sha256: str,
+        flavour: str,
+        signature: MinHashSignature,
+    ) -> None:
+        with connection() as conn, conn.cursor() as cur:
+            if flavour == "byte":
+                cur.execute(
+                    """
+                    INSERT INTO sample_trigrams (
+                        analysis_id, sample_sha256, signature_version,
+                        byte_minhash, byte_trigram_count
+                    ) VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (analysis_id) DO UPDATE
+                        SET sample_sha256       = EXCLUDED.sample_sha256,
+                            signature_version   = EXCLUDED.signature_version,
+                            byte_minhash        = EXCLUDED.byte_minhash,
+                            byte_trigram_count  = EXCLUDED.byte_trigram_count,
+                            extracted_at        = now()
+                    """,
+                    (
+                        analysis_id,
+                        sample_sha256,
+                        signature.version,
+                        signature.to_bytes(),
+                        signature.cardinality,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO sample_trigrams (
+                        analysis_id, sample_sha256, signature_version,
+                        byte_minhash, byte_trigram_count,
+                        opcode_minhash, opcode_trigram_count
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (analysis_id) DO UPDATE
+                        SET opcode_minhash        = EXCLUDED.opcode_minhash,
+                            opcode_trigram_count  = EXCLUDED.opcode_trigram_count,
+                            extracted_at          = now()
+                    """,
+                    (
+                        analysis_id,
+                        sample_sha256,
+                        signature.version,
+                        b"",  # placeholder (NOT NULL); overwritten if byte-row exists
+                        0,
+                        signature.to_bytes(),
+                        signature.cardinality,
+                    ),
+                )
+            # Re-write the bands. Easiest correct semantics: delete-then-insert
+            # for this (analysis_id, flavour) since signatures are not partial.
+            cur.execute(
+                "DELETE FROM sample_minhash_bands WHERE analysis_id = %s AND flavour = %s",
+                (analysis_id, flavour),
+            )
+            band_rows = [
+                (analysis_id, flavour, idx, value)
+                for idx, value in enumerate(signature.bands())
+            ]
+            if len(band_rows) != NUM_BANDS:
+                raise RuntimeError(
+                    f"signature emitted {len(band_rows)} bands, expected {NUM_BANDS}"
+                )
+            cur.executemany(
+                """
+                INSERT INTO sample_minhash_bands (
+                    analysis_id, flavour, band_index, band_value
+                ) VALUES (%s, %s, %s, %s)
+                """,
+                band_rows,
+            )
+
+    def store_similarity_edge(
+        self, left: UUID, right: UUID, flavour: str, similarity: float
+    ) -> None:
+        if left >= right:
+            raise ValueError(f"non-canonical edge {left} >= {right}")
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO sample_similarity (
+                    left_analysis_id, right_analysis_id, flavour, similarity_score
+                ) VALUES (%s, %s, %s, %s)
+                ON CONFLICT (left_analysis_id, right_analysis_id, flavour)
+                DO UPDATE SET
+                    similarity_score = EXCLUDED.similarity_score,
+                    computed_at      = now()
+                """,
+                (left, right, flavour, round(similarity, 3)),
+            )

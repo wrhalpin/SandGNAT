@@ -40,7 +40,25 @@ making architectural changes.
 - `orchestrator/vm_pool.py` — DB-backed vmid pool (`vm_pool_leases` table).
   `try_acquire_lease` is a conditional UPSERT; the WHERE guard is the lock.
   Stale leases get reaped by heartbeat age, so a crashed worker doesn't
-  permanently burn a slot.
+  permanently burn a slot. Two pool instances share the table — Windows
+  (vmid 9100–9199, `guest_type='windows'`) and Linux (9200–9299,
+  `guest_type='linux'`).
+- `orchestrator/trigrams.py` — stdlib-only MinHash + LSH band derivation.
+  Imported by both the host orchestrator and the Linux static-analysis
+  guest. Bumping `SIGNATURE_VERSION` invalidates every stored signature.
+- `orchestrator/similarity.py` — banded LSH lookup over
+  `sample_minhash_bands` + Jaccard ranking + `short_circuit_decision`.
+- `orchestrator/static_analysis.py` — pure parser turning the Linux
+  guest's `static_analysis.json` + trigram blobs into a
+  `StaticAnalysisBundle`. Mirrors `analyzer.py`'s role for detonation.
+- `orchestrator/tasks_static.py` — Celery `static_analyze_sample` on queue
+  `static`. Acquires a Linux pool slot, publishes a `mode=static_analysis`
+  manifest, persists findings + signatures, runs LSH lookup, and either
+  short-circuits (mark near-duplicate, skip detonation) or chains
+  `analyze_malware_sample`.
+- `linux_guest_agent/` — Linux static-analysis guest. **Stdlib only** for
+  the watcher/runner; per-tool deps are optional and degrade to no-ops
+  when missing. Reuses `orchestrator.schema` directly.
 - `guest_agent/` — Windows-side collector. **Stdlib only** + `orchestrator.schema`.
   Runs inside the analysis VM, polls the staging share, drives ProcMon/tshark/RegShot,
   detonates the sample, packages artifacts. Deployed as a PyInstaller-frozen exe.
@@ -75,6 +93,17 @@ making architectural changes.
 - **VM pool is the only vmid allocator.** Never hard-code vmids in tasks —
   `VmPool.acquire(analysis_id)` hands out from the configured range and
   records a lease. Always `pool.release()` in a finally block.
+- **Wire schema is v2.** `JobManifest.mode` discriminates between
+  `MODE_DETONATION` (Windows guest) and `MODE_STATIC_ANALYSIS` (Linux
+  guest). Each guest refuses manifests for the other mode at claim time —
+  misrouted jobs fail fast instead of producing nonsense envelopes. Bumping
+  `SCHEMA_VERSION` requires re-freezing both guests.
+- **Static analysis runs first when enabled.** With
+  `STATIC_ANALYSIS_ENABLED=1`, `intake.enqueue_analysis` routes to
+  `static_analyze_sample` instead of `analyze_malware_sample`. The static
+  task either short-circuits (near-duplicate found above the configured
+  Jaccard threshold) or chains the detonation task itself. Detonation
+  never inserts the job row — intake still does, just like before.
 
 ## Safety rules (non-negotiable)
 

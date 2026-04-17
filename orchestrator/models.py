@@ -61,9 +61,38 @@ class VmLease:
     node: str
     analysis_id: UUID | None
     status: str  # 'leased' | 'released' | 'orphaned'
+    guest_type: str = "windows"  # 'windows' | 'linux'
     acquired_at: datetime | None = None
     heartbeat_at: datetime | None = None
     released_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class StaticAnalysisRow:
+    """Normalised view of one Linux-guest static-analysis result."""
+
+    analysis_id: UUID
+    file_format: str | None = None
+    architecture: str | None = None
+    entry_point: int | None = None
+    is_packed_heuristic: bool | None = None
+    section_count: int | None = None
+    overall_entropy: float | None = None
+    imports: dict[str, Any] | None = None
+    exports: dict[str, Any] | None = None
+    sections: list[dict[str, Any]] = field(default_factory=list)
+    strings_summary: dict[str, Any] | None = None
+    capa_capabilities: list[dict[str, Any]] = field(default_factory=list)
+    deep_yara_matches: list[str] = field(default_factory=list)
+    raw_envelope: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class LineageEdge:
+    child_analysis_id: UUID
+    parent_analysis_id: UUID
+    relation: str  # 'near_duplicate' | 'reanalysis' | 'manual_link'
+    similarity_score: float | None = None
 
 
 @dataclass(slots=True)

@@ -1,29 +1,18 @@
-"""Watch the staging share and process one job at a time.
+"""Polling watcher for the Linux static-analysis guest.
 
-The guest agent is single-threaded by design: concurrent detonations in the
-same VM would contaminate each other's artifacts. Host-side parallelism is
-the job of the orchestrator, which uses multiple analysis VMs.
+Identical staging contract to `guest_agent/watcher.py`:
 
-Pickup protocol:
+    {staging}/pending/{job_id}.json   -> claimed via os.rename
+    {staging}/in-flight/{job_id}/     -> per-job workspace
+    {staging}/completed/{job_id}/     -> result.json + tool outputs
 
-    1. Host writes `{staging}/pending/{job_id}.json`.
-    2. Guest attempts `os.rename` -> `{staging}/in-flight/{job_id}/job.json`.
-       The rename is atomic on both NTFS and POSIX; whichever guest wins the
-       race owns the job. (Today there's only ever one guest per share, but
-       the protocol is correct even if we scale out.)
-    3. Guest runs the job into the `in-flight` workspace.
-    4. Guest writes `result.json` to the workspace, then renames the whole
-       directory to `{staging}/completed/{job_id}/`. Host polls for that
-       directory's existence + `result.json` before reading artifacts.
-
-A crashed guest leaves a half-processed `in-flight/{job_id}/` directory. On
-startup we scan `in-flight/` and mark abandoned jobs as failed so the host
-isn't left hanging. That recovery is implemented in `_reap_stale_in_flight`.
+The only behavioural difference is the mode guard: this guest refuses any
+manifest whose `mode != "static_analysis"` so a misrouted detonation job
+fails fast in the guest instead of producing an empty envelope.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import shutil
@@ -32,41 +21,37 @@ from pathlib import Path
 
 from orchestrator.schema import (
     MANIFEST_FILENAME,
-    MODE_DETONATION,
+    MODE_STATIC_ANALYSIS,
     RESULT_FILENAME,
     SCHEMA_VERSION,
     JobManifest,
     ResultEnvelope,
 )
 
-from .config import GuestConfig
-from .runner import run_job
+from .config import LinuxGuestConfig
+from .runner import run_static_job
 
 log = logging.getLogger(__name__)
 
 
-def _pending_dir(cfg: GuestConfig) -> Path:
+def _pending_dir(cfg: LinuxGuestConfig) -> Path:
     return cfg.staging_root / "pending"
 
 
-def _in_flight_dir(cfg: GuestConfig) -> Path:
+def _in_flight_dir(cfg: LinuxGuestConfig) -> Path:
     return cfg.staging_root / "in-flight"
 
 
-def _completed_dir(cfg: GuestConfig) -> Path:
+def _completed_dir(cfg: LinuxGuestConfig) -> Path:
     return cfg.staging_root / "completed"
 
 
-def _ensure_dirs(cfg: GuestConfig) -> None:
+def _ensure_dirs(cfg: LinuxGuestConfig) -> None:
     for d in (_pending_dir(cfg), _in_flight_dir(cfg), _completed_dir(cfg)):
         d.mkdir(parents=True, exist_ok=True)
 
 
-def _claim_next_job(cfg: GuestConfig) -> tuple[JobManifest, Path] | None:
-    """Atomically move one pending manifest to in-flight and return it.
-
-    Returns (manifest, workspace_path) or None if nothing is pending.
-    """
+def _claim_next_job(cfg: LinuxGuestConfig) -> tuple[JobManifest, Path] | None:
     pending = _pending_dir(cfg)
     for candidate in sorted(pending.glob("*.json")):
         job_id = candidate.stem
@@ -74,14 +59,12 @@ def _claim_next_job(cfg: GuestConfig) -> tuple[JobManifest, Path] | None:
         try:
             workspace.mkdir(parents=True, exist_ok=False)
         except FileExistsError:
-            # Another guest took this one, or a prior crash left debris.
             continue
         target = workspace / MANIFEST_FILENAME
         try:
             os.rename(candidate, target)
         except OSError as exc:
             log.warning("Failed to claim %s: %s", candidate, exc)
-            # Best-effort cleanup of the empty workspace.
             try:
                 workspace.rmdir()
             except OSError:
@@ -93,13 +76,14 @@ def _claim_next_job(cfg: GuestConfig) -> tuple[JobManifest, Path] | None:
             log.error("Invalid manifest %s: %s", target, exc)
             _write_failure_result(cfg, job_id, workspace, f"invalid manifest: {exc}")
             continue
-        if manifest.mode != MODE_DETONATION:
+        if manifest.mode != MODE_STATIC_ANALYSIS:
             log.error(
-                "Refusing job %s: mode=%r, this is the detonation guest", job_id, manifest.mode
+                "Refusing job %s: mode=%r, this is the static-analysis guest",
+                job_id, manifest.mode,
             )
             _write_failure_result(
                 cfg, job_id, workspace,
-                f"mode {manifest.mode!r} not supported by detonation guest",
+                f"mode {manifest.mode!r} not supported by static-analysis guest",
             )
             continue
         return manifest, workspace
@@ -107,9 +91,8 @@ def _claim_next_job(cfg: GuestConfig) -> tuple[JobManifest, Path] | None:
 
 
 def _write_failure_result(
-    cfg: GuestConfig, job_id: str, workspace: Path, message: str
+    cfg: LinuxGuestConfig, job_id: str, workspace: Path, message: str
 ) -> None:
-    """Record a synthetic failure envelope so the host doesn't wait forever."""
     envelope = ResultEnvelope(
         schema_version=SCHEMA_VERSION,
         job_id=job_id,
@@ -120,42 +103,43 @@ def _write_failure_result(
         sample_pid=None,
         sample_exit_code=None,
         timed_out=False,
+        mode=MODE_STATIC_ANALYSIS,
         errors=[message],
     )
     (workspace / RESULT_FILENAME).write_text(envelope.to_json(), encoding="utf-8")
     _promote_to_completed(cfg, job_id, workspace)
 
 
-def _promote_to_completed(cfg: GuestConfig, job_id: str, workspace: Path) -> None:
+def _promote_to_completed(cfg: LinuxGuestConfig, job_id: str, workspace: Path) -> None:
     target = _completed_dir(cfg) / job_id
     if target.exists():
         shutil.rmtree(target, ignore_errors=True)
     os.rename(workspace, target)
 
 
-def _reap_stale_in_flight(cfg: GuestConfig) -> None:
-    """On startup, fail any job left in-flight from a prior guest crash."""
+def _reap_stale_in_flight(cfg: LinuxGuestConfig) -> None:
     for workspace in _in_flight_dir(cfg).iterdir():
         if not workspace.is_dir():
             continue
         job_id = workspace.name
         manifest_path = workspace / MANIFEST_FILENAME
         if not manifest_path.exists():
-            # Never got far enough to have a manifest; just discard.
             shutil.rmtree(workspace, ignore_errors=True)
             continue
         log.warning("Reaping stale in-flight job: %s", job_id)
         _write_failure_result(
-            cfg, job_id, workspace, "agent restarted while job was in-flight"
+            cfg, job_id, workspace, "static-analysis agent restarted while job was in-flight"
         )
 
 
-def _process_one(cfg: GuestConfig, manifest: JobManifest, workspace: Path) -> None:
-    log.info("Starting job %s (%s)", manifest.job_id, manifest.sample_name)
+def _process_one(
+    cfg: LinuxGuestConfig, manifest: JobManifest, workspace: Path
+) -> None:
+    log.info("Starting static job %s (%s)", manifest.job_id, manifest.sample_name)
     try:
-        envelope = run_job(manifest, cfg, workspace)
+        envelope = run_static_job(manifest, cfg, workspace)
     except Exception as exc:  # noqa: BLE001 — never let the watcher die
-        log.exception("Runner crashed for job %s", manifest.job_id)
+        log.exception("Static runner crashed for job %s", manifest.job_id)
         envelope = ResultEnvelope(
             schema_version=SCHEMA_VERSION,
             job_id=manifest.job_id,
@@ -166,20 +150,18 @@ def _process_one(cfg: GuestConfig, manifest: JobManifest, workspace: Path) -> No
             sample_pid=None,
             sample_exit_code=None,
             timed_out=False,
+            mode=MODE_STATIC_ANALYSIS,
             errors=[f"runner crashed: {exc}"],
         )
 
-    # Write result envelope atomically: write-then-rename so the host never
-    # sees a partial JSON file.
     tmp = workspace / (RESULT_FILENAME + ".tmp")
     tmp.write_text(envelope.to_json(), encoding="utf-8")
     os.replace(tmp, workspace / RESULT_FILENAME)
     _promote_to_completed(cfg, manifest.job_id, workspace)
-    log.info("Completed job %s (status=%s)", manifest.job_id, envelope.status)
+    log.info("Completed static job %s (status=%s)", manifest.job_id, envelope.status)
 
 
-def serve(cfg: GuestConfig, *, run_once: bool = False) -> None:
-    """Main loop. Set `run_once=True` in tests to process exactly one job."""
+def serve(cfg: LinuxGuestConfig, *, run_once: bool = False) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -187,7 +169,7 @@ def serve(cfg: GuestConfig, *, run_once: bool = False) -> None:
     _ensure_dirs(cfg)
     _reap_stale_in_flight(cfg)
 
-    log.info("guest agent watching %s", cfg.staging_root)
+    log.info("linux static-analysis guest watching %s", cfg.staging_root)
     while True:
         claim = _claim_next_job(cfg)
         if claim is not None:

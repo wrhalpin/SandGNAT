@@ -23,6 +23,7 @@ from uuid import UUID
 from .schema import (
     DROPPED_DIR,
     MANIFEST_FILENAME,
+    MODE_DETONATION,
     PCAP_FILE,
     PROCMON_CSV,
     REGSHOT_DIFF,
@@ -31,7 +32,9 @@ from .schema import (
     CaptureConfig,
     JobManifest,
     ResultEnvelope,
+    StaticAnalysisOptions,
     guest_sample_path,
+    linux_guest_sample_path,
 )
 
 log = logging.getLogger(__name__)
@@ -100,24 +103,38 @@ def submit_job(
     timeout_seconds: int,
     capture: CaptureConfig | None = None,
     arguments: list[str] | None = None,
+    mode: str = MODE_DETONATION,
+    static: StaticAnalysisOptions | None = None,
 ) -> None:
-    """Atomically publish a job manifest to the guest."""
+    """Atomically publish a job manifest to the guest.
+
+    `mode` selects which guest class is expected to pick up the job — Windows
+    detonation guests refuse `static_analysis` manifests and vice versa, so
+    a mis-routed job fails fast in the guest rather than producing nonsense.
+    """
     _ensure_staging(staging_root)
+    sample_path_for_guest = (
+        linux_guest_sample_path(str(job_id), sample_name)
+        if mode != MODE_DETONATION
+        else guest_sample_path(str(job_id), sample_name)
+    )
     manifest = JobManifest(
         schema_version=SCHEMA_VERSION,
         job_id=str(job_id),
         sample_sha256=sample_sha256,
-        sample_guest_path=guest_sample_path(str(job_id), sample_name),
+        sample_guest_path=sample_path_for_guest,
         sample_name=sample_name,
         arguments=arguments or [],
         timeout_seconds=timeout_seconds,
+        mode=mode,
         capture=capture or CaptureConfig(),
+        static=static or StaticAnalysisOptions(),
     )
     pending = _pending_path(staging_root, job_id)
     tmp = pending.with_suffix(".json.tmp")
     tmp.write_text(manifest.to_json(), encoding="utf-8")
     tmp.replace(pending)
-    log.info("Published job manifest: %s", pending)
+    log.info("Published job manifest (%s): %s", mode, pending)
 
 
 def wait_for_result(

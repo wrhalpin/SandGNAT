@@ -35,13 +35,23 @@ yara = [
     # Optional: enable pre-detonation YARA scanning in the intake pipeline.
     "yara-python>=4.5",
 ]
+static = [
+    # Linux static-analysis guest dependencies. Install on the Linux
+    # static-analysis VM (not the orchestrator host). All tools are optional
+    # at runtime — missing libs degrade to a no-op rather than crashing.
+    "pefile>=2023.2.7",
+    "pyelftools>=0.30",
+    "ssdeep>=3.4",
+    "python-tlsh>=4.5",
+    "capstone>=5.0",
+]
 
 [project.scripts]
 sandgnat-worker = "orchestrator.worker:main"
 sandgnat-intake = "orchestrator.intake_server:main"
 
 [tool.setuptools.packages.find]
-include = ["orchestrator*"]
+include = ["orchestrator*", "linux_guest_agent*"]
 
 [tool.ruff]
 line-length = 100

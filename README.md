@@ -22,14 +22,22 @@ network traffic, process trees), and emit STIX 2.1 objects into PostgreSQL.
 │   ├── vm_pool.py                DB-backed VM pool manager (lease + reap)
 │   ├── guest_driver.py           Stages samples, publishes jobs, waits for results
 │   ├── analyzer.py               Turns guest artifacts into STIX + normalised rows
-│   ├── persistence.py            Writes STIX objects + metadata to Postgres
+│   ├── static_analysis.py        Parses Linux static-guest envelope into a bundle
+│   ├── trigrams.py               Byte/opcode trigrams + MinHash + LSH bands (stdlib)
+│   ├── similarity.py             LSH-banded similarity lookup + short-circuit
+│   ├── persistence.py            Writes STIX + metadata + signatures to Postgres
 │   ├── intake.py                 Sample intake pipeline (validate/hash/VT/YARA/enqueue)
 │   ├── intake_api.py             Flask HTTP front-end for submissions
 │   ├── intake_server.py          CLI entry point for the intake service
 │   ├── vt_client.py              VirusTotal v3 hash-lookup client (no upload)
 │   ├── yara_scanner.py           Optional YARA pre-classification
 │   ├── tasks.py                  Celery tasks (analyze_malware_sample)
+│   ├── tasks_static.py           Celery static_analyze_sample (Linux pre-stage)
 │   └── parsers/                  Artifact parsers (ProcMon, RegShot, PCAP)
+├── linux_guest_agent/            Linux static-analysis guest (stdlib + opt-in deps)
+│   ├── watcher.py                Polls staging share for static_analysis jobs
+│   ├── runner.py                 Per-job static toolchain orchestration
+│   └── tools/                    PE/ELF, fuzzy, strings/entropy, YARA, CAPA, trigrams
 ├── guest_agent/                  Windows-side collector (stdlib only, PyInstaller-friendly)
 │   ├── config.py                 Env-backed guest settings
 │   ├── watcher.py                Polls staging/pending, claims jobs atomically
@@ -52,6 +60,7 @@ pip install -e '.[dev]'
 # Apply schema to local Postgres (run migrations in order)
 psql "$DATABASE_URL" -f migrations/001_initial_schema.sql
 psql "$DATABASE_URL" -f migrations/002_intake_and_vm_pool.sql
+psql "$DATABASE_URL" -f migrations/003_static_analysis.sql
 
 # Run unit tests
 pytest
@@ -95,7 +104,13 @@ Env knobs for intake:
 
 ## Status
 
-Phases 1–3 complete: scaffold, host<->guest detonation protocol, analyzer,
-intake service (HTTP API + VT hash pre-check + optional YARA scan), and the
-DB-backed Proxmox VM pool manager with crash-safe lease reclamation.
-Phase 4 is end-to-end orchestration testing against real Proxmox + Postgres.
+Phases 1–4 complete: scaffold, host<->guest detonation protocol, analyzer,
+intake service, DB-backed Proxmox VM pool manager, and a **Linux
+static-analysis pre-stage** with byte/opcode trigram MinHash signatures
+and LSH-banded near-duplicate short-circuit. New submissions that match an
+already-analysed sample above the configured Jaccard threshold (default
+0.85) skip Windows detonation and are linked back to the parent analysis
+via `analysis_lineage`.
+
+Phase 5 is end-to-end orchestration testing against real Proxmox + Postgres
+plus TI-platform connectors for STIX export.

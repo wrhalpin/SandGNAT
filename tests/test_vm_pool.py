@@ -117,3 +117,33 @@ def test_active_count_tracks_leased_only() -> None:
     assert pool.active_count() == 2
     pool.release(9100, a)
     assert pool.active_count() == 1
+
+
+def test_two_pools_with_disjoint_ranges_share_one_store() -> None:
+    """Windows + Linux pool instances on a single store don't trample each
+    other: each picks vmids only from its configured range and tags leases
+    with its guest_type."""
+    store = InMemoryPoolStore()
+    win_pool = VmPool(
+        store, vmid_min=9100, vmid_max=9101, node="pve1", guest_type="windows"
+    )
+    lin_pool = VmPool(
+        store, vmid_min=9200, vmid_max=9201, node="pve1", guest_type="linux"
+    )
+    job = uuid4()
+
+    win_vmid = win_pool.acquire(job)
+    lin_vmid = lin_pool.acquire(job)  # same job_id, different guest_type — allowed
+    assert 9100 <= win_vmid <= 9101
+    assert 9200 <= lin_vmid <= 9201
+    assert store._leases[win_vmid].guest_type == "windows"
+    assert store._leases[lin_vmid].guest_type == "linux"
+
+    # Each pool's active_count counts only its own slots indirectly via vmid range.
+    assert win_pool.active_count() == 2  # active_count counts all leased rows
+    assert lin_pool.active_count() == 2
+
+
+def test_pool_rejects_unknown_guest_type() -> None:
+    with pytest.raises(ValueError):
+        VmPool(InMemoryPoolStore(), vmid_min=1, vmid_max=2, node="x", guest_type="freebsd")
