@@ -11,15 +11,25 @@ making architectural changes.
 
 ## Layout at a glance
 
-- `orchestrator/` — Python Celery-based job orchestrator. This is where almost
-  all code in this repo lives.
+- `orchestrator/` — host-side Python package. Celery tasks, Proxmox API,
+  Postgres persistence, STIX construction.
+- `orchestrator/schema.py` — shared host<->guest wire schema. **Stdlib only**;
+  both sides import it. Don't add third-party deps here.
 - `orchestrator/stix_builder.py` — STIX 2.1 factories. All persisted
   behavioural findings flow through here.
 - `orchestrator/parsers/` — One parser per capture tool (ProcMon CSV, RegShot
   diff, Wireshark PCAP). Parsers return plain dicts; `stix_builder` converts
   them to STIX. Keep that separation.
+- `orchestrator/guest_driver.py` — host side of the detonation protocol:
+  stages samples, publishes job manifests to `staging/pending/`, waits for the
+  guest to write `completed/{job_id}/result.json`.
+- `orchestrator/analyzer.py` — turns a guest's completed artifacts into a
+  (STIX objects + normalised rows) bundle. Pure — no DB writes.
 - `orchestrator/persistence.py` — the only module that writes to Postgres. Use
   it from tasks and tests; don't scatter SQL elsewhere.
+- `guest_agent/` — Windows-side collector. **Stdlib only** + `orchestrator.schema`.
+  Runs inside the analysis VM, polls the staging share, drives ProcMon/tshark/RegShot,
+  detonates the sample, packages artifacts. Deployed as a PyInstaller-frozen exe.
 - `migrations/` — forward-only numbered SQL files. Never edit an applied
   migration; add a new one.
 - `infra/` — non-code configuration (firewall exports, guest prep scripts).
@@ -35,8 +45,15 @@ making architectural changes.
   Never persist a STIX object without it.
 - **Secrets/config:** all via env vars, read in `orchestrator/config.py`. No
   hard-coded hosts, tokens, or paths.
-- **Testing:** parsers are pure functions over fixture files — add a fixture in
-  `tests/fixtures/` and a unit test next to the parser.
+- **Testing:** parsers and analyzer are pure functions over fixture files.
+  `pytest tests/` runs the full suite offline (no DB, no Proxmox, no Windows).
+- **Windows paths from the guest:** the guest speaks Windows path syntax.
+  On the host, use `PureWindowsPath(original_path).name` to extract filenames
+  — `Path(...)` treats backslashes literally on POSIX and will bite you.
+- **Staging protocol:** host writes `staging/pending/{job_id}.json`; guest
+  atomically renames it into `staging/in-flight/{job_id}/`; guest writes the
+  workspace, renames to `staging/completed/{job_id}/`, drops `result.json`
+  last. Host polls for `result.json` — don't read other files until it exists.
 
 ## Safety rules (non-negotiable)
 
