@@ -21,6 +21,7 @@ from .models import (
     JobStatus,
     NetworkIOC,
     RegistryModification,
+    VmLease,
 )
 
 
@@ -33,22 +34,133 @@ def insert_job(job: AnalysisJob) -> None:
         cur.execute(
             """
             INSERT INTO analysis_jobs (
-                id, sample_hash_sha256, sample_name, sample_mime_type, status,
-                timeout_seconds, network_isolation, execution_command
+                id, sample_hash_sha256, sample_hash_md5, sample_hash_sha1,
+                sample_size_bytes, sample_name, sample_mime_type, status,
+                timeout_seconds, network_isolation, execution_command,
+                submitter, intake_source, intake_decision, intake_notes, priority,
+                vt_verdict, vt_detection_count, vt_total_engines, vt_last_seen,
+                yara_matches
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (
+                %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s
+            )
             """,
             (
                 job.id,
                 job.sample_hash_sha256,
+                job.sample_hash_md5,
+                job.sample_hash_sha1,
+                job.sample_size_bytes,
                 job.sample_name,
                 job.sample_mime_type,
                 job.status.value,
                 job.timeout_seconds,
                 job.network_isolation,
                 job.execution_command,
+                job.submitter,
+                job.intake_source,
+                job.intake_decision,
+                job.intake_notes,
+                job.priority,
+                job.vt_verdict,
+                job.vt_detection_count,
+                job.vt_total_engines,
+                job.vt_last_seen,
+                list(job.yara_matches),
             ),
         )
+
+
+def find_job_by_sha256(sha256: str) -> AnalysisJob | None:
+    """Return the most-recent non-failed job for a hash, or None."""
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, sample_hash_sha256, sample_name, sample_mime_type, status,
+                   sample_hash_md5, sample_hash_sha1, sample_size_bytes,
+                   submitter, intake_source, intake_decision, intake_notes, priority,
+                   vt_verdict, vt_detection_count, vt_total_engines, vt_last_seen,
+                   yara_matches, submitted_at, started_at, completed_at,
+                   duration_seconds, timeout_seconds, network_isolation,
+                   evasion_observed, quarantine_path
+            FROM analysis_jobs
+            WHERE sample_hash_sha256 = %s
+            ORDER BY submitted_at DESC
+            LIMIT 1
+            """,
+            (sha256,),
+        )
+        row = cur.fetchone()
+    return _row_to_job(row) if row else None
+
+
+def get_job(job_id: UUID) -> AnalysisJob | None:
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, sample_hash_sha256, sample_name, sample_mime_type, status,
+                   sample_hash_md5, sample_hash_sha1, sample_size_bytes,
+                   submitter, intake_source, intake_decision, intake_notes, priority,
+                   vt_verdict, vt_detection_count, vt_total_engines, vt_last_seen,
+                   yara_matches, submitted_at, started_at, completed_at,
+                   duration_seconds, timeout_seconds, network_isolation,
+                   evasion_observed, quarantine_path
+            FROM analysis_jobs
+            WHERE id = %s
+            """,
+            (job_id,),
+        )
+        row = cur.fetchone()
+    return _row_to_job(row) if row else None
+
+
+def _row_to_job(row: Any) -> AnalysisJob:
+    return AnalysisJob(
+        id=row[0],
+        sample_hash_sha256=row[1],
+        sample_name=row[2],
+        sample_mime_type=row[3],
+        status=JobStatus(row[4]),
+        sample_hash_md5=row[5],
+        sample_hash_sha1=row[6],
+        sample_size_bytes=row[7],
+        submitter=row[8],
+        intake_source=row[9],
+        intake_decision=row[10],
+        intake_notes=row[11],
+        priority=row[12] if row[12] is not None else 5,
+        vt_verdict=row[13],
+        vt_detection_count=row[14],
+        vt_total_engines=row[15],
+        vt_last_seen=row[16],
+        yara_matches=list(row[17] or []),
+        submitted_at=row[18],
+        started_at=row[19],
+        completed_at=row[20],
+        duration_seconds=row[21],
+        timeout_seconds=row[22] if row[22] is not None else 300,
+        network_isolation=row[23] if row[23] is not None else True,
+        evasion_observed=row[24] if row[24] is not None else False,
+        quarantine_path=row[25],
+    )
+
+
+class PostgresJobStore:
+    """Adapts module-level persistence functions to the `intake.JobStore` protocol."""
+
+    def find_existing_job_by_sha256(self, sha256: str) -> AnalysisJob | None:
+        return find_job_by_sha256(sha256)
+
+    def insert_job(self, job: AnalysisJob) -> None:
+        insert_job(job)
+
+    def get_job(self, job_id: UUID) -> AnalysisJob | None:
+        return get_job(job_id)
 
 
 def update_job_status(
@@ -330,3 +442,116 @@ def export_bundle(analysis_id: UUID) -> dict[str, Any]:
 
 def serialize_bundle(analysis_id: UUID) -> str:
     return json.dumps(export_bundle(analysis_id), indent=2, sort_keys=True)
+
+
+# ---------------------------------------------------------------------------
+# VM pool leases
+# ---------------------------------------------------------------------------
+
+class PostgresPoolStore:
+    """Postgres-backed implementation of `vm_pool.PoolStore`.
+
+    All operations are single-statement. The acquire path in particular is a
+    conditional UPSERT whose WHERE clause is the lock: if another worker
+    already holds a live lease on the vmid, the UPDATE branch matches no
+    rows and RETURNING yields nothing.
+    """
+
+    def try_acquire_lease(
+        self,
+        vmid: int,
+        node: str,
+        analysis_id: UUID,
+        stale_after_seconds: int,
+    ) -> bool:
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO vm_pool_leases (vmid, node, analysis_id, status)
+                VALUES (%s, %s, %s, 'leased')
+                ON CONFLICT (vmid) DO UPDATE
+                    SET analysis_id  = EXCLUDED.analysis_id,
+                        node         = EXCLUDED.node,
+                        status       = 'leased',
+                        acquired_at  = now(),
+                        heartbeat_at = now(),
+                        released_at  = NULL
+                    WHERE vm_pool_leases.status IN ('released','orphaned')
+                       OR vm_pool_leases.heartbeat_at <
+                          now() - INTERVAL '{int(stale_after_seconds)} seconds'
+                RETURNING vmid
+                """,
+                (vmid, node, analysis_id),
+            )
+            return cur.fetchone() is not None
+
+    def heartbeat_lease(self, vmid: int, analysis_id: UUID) -> bool:
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE vm_pool_leases
+                   SET heartbeat_at = now()
+                 WHERE vmid = %s AND analysis_id = %s AND status = 'leased'
+                """,
+                (vmid, analysis_id),
+            )
+            return cur.rowcount > 0
+
+    def release_lease(self, vmid: int, analysis_id: UUID) -> None:
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE vm_pool_leases
+                   SET status = 'released', released_at = now()
+                 WHERE vmid = %s AND analysis_id = %s AND status = 'leased'
+                """,
+                (vmid, analysis_id),
+            )
+
+    def mark_orphaned(self, vmid: int) -> None:
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE vm_pool_leases
+                   SET status = 'orphaned', released_at = now()
+                 WHERE vmid = %s AND status = 'leased'
+                """,
+                (vmid,),
+            )
+
+    def active_leases(self) -> list[VmLease]:
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT vmid, node, analysis_id, status,
+                       acquired_at, heartbeat_at, released_at
+                  FROM vm_pool_leases
+                 WHERE status = 'leased'
+                """
+            )
+            return [
+                VmLease(
+                    vmid=row[0],
+                    node=row[1],
+                    analysis_id=row[2],
+                    status=row[3],
+                    acquired_at=row[4],
+                    heartbeat_at=row[5],
+                    released_at=row[6],
+                )
+                for row in cur.fetchall()
+            ]
+
+    def reap_stale(self, stale_after_seconds: int) -> list[int]:
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""
+                UPDATE vm_pool_leases
+                   SET status = 'orphaned', released_at = now()
+                 WHERE status = 'leased'
+                   AND heartbeat_at <
+                       now() - INTERVAL '{int(stale_after_seconds)} seconds'
+                RETURNING vmid
+                """
+            )
+            return [row[0] for row in cur.fetchall()]
