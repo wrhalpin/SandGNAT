@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.env.*
+!.env.example
+
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Local dev artifacts — never commit captured samples or PCAPs
+samples/
+quarantine/
+captures/
+*.pcap
+*.pml
+*.dmp

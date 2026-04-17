@@ -1,0 +1,89 @@
+"""Dataclasses mirroring the core Postgres tables.
+
+These are transport objects between the orchestrator layers. They are
+intentionally thin — the authoritative schema is `migrations/001_initial_schema.sql`.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import StrEnum
+from typing import Any
+from uuid import UUID
+
+
+class JobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    QUARANTINED = "quarantined"
+
+
+@dataclass(slots=True)
+class AnalysisJob:
+    id: UUID
+    sample_hash_sha256: str
+    status: JobStatus
+    sample_name: str | None = None
+    sample_mime_type: str | None = None
+    submitted_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    duration_seconds: int | None = None
+    vm_uuid: UUID | None = None
+    execution_command: str | None = None
+    timeout_seconds: int = 300
+    network_isolation: bool = True
+    evasion_observed: bool = False
+    analyst_notes: str | None = None
+    result_summary: dict[str, Any] | None = None
+    quarantine_path: str | None = None
+
+
+@dataclass(slots=True)
+class DroppedFile:
+    analysis_id: UUID
+    filename: str
+    original_path: str
+    size_bytes: int
+    hash_sha256: str
+    hash_md5: str | None = None
+    quarantine_path: str | None = None
+    verified: bool = False
+    created_by_process_name: str | None = None
+    created_by_process_pid: int | None = None
+
+
+@dataclass(slots=True)
+class RegistryModification:
+    analysis_id: UUID
+    action: str  # 'added' | 'modified' | 'deleted'
+    hive: str
+    key_path: str
+    value_name: str | None = None
+    value_data: str | None = None
+    value_type: str | None = None
+    persistence_indicator: bool = False
+
+
+@dataclass(slots=True)
+class NetworkIOC:
+    analysis_id: UUID
+    type: str  # 'ipv4' | 'ipv6' | 'domain' | 'url' | 'dns_query'
+    indicator: str
+    direction: str | None = None  # 'inbound' | 'outbound'
+    protocol: str | None = None
+    port: int | None = None
+    observed_at: datetime | None = None
+    context: str | None = None
+    confirmed_malicious: bool = False
+
+
+@dataclass(slots=True)
+class AuditEvent:
+    analysis_id: UUID
+    event_type: str
+    details: dict[str, Any] = field(default_factory=dict)
+    actor: str = "system"
