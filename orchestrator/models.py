@@ -28,6 +28,9 @@ class AnalysisJob:
     status: JobStatus
     sample_name: str | None = None
     sample_mime_type: str | None = None
+    sample_hash_md5: str | None = None
+    sample_hash_sha1: str | None = None
+    sample_size_bytes: int | None = None
     submitted_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -40,6 +43,27 @@ class AnalysisJob:
     analyst_notes: str | None = None
     result_summary: dict[str, Any] | None = None
     quarantine_path: str | None = None
+    submitter: str | None = None
+    intake_source: str | None = None
+    intake_decision: str | None = None
+    intake_notes: str | None = None
+    priority: int = 5
+    vt_verdict: str | None = None
+    vt_detection_count: int | None = None
+    vt_total_engines: int | None = None
+    vt_last_seen: datetime | None = None
+    yara_matches: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class VmLease:
+    vmid: int
+    node: str
+    analysis_id: UUID | None
+    status: str  # 'leased' | 'released' | 'orphaned'
+    acquired_at: datetime | None = None
+    heartbeat_at: datetime | None = None
+    released_at: datetime | None = None
 
 
 @dataclass(slots=True)

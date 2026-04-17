@@ -27,6 +27,20 @@ making architectural changes.
   (STIX objects + normalised rows) bundle. Pure — no DB writes.
 - `orchestrator/persistence.py` — the only module that writes to Postgres. Use
   it from tasks and tests; don't scatter SQL elsewhere.
+- `orchestrator/intake.py` — sample intake pipeline (validate → hash → dedupe
+  → VT hash lookup → YARA scan → stage bytes → insert row → enqueue). Takes
+  injectable `JobStore` + `Enqueuer` so tests run offline.
+- `orchestrator/intake_api.py` + `intake_server.py` — Flask HTTP front-end
+  (`POST /submit`, `GET /jobs/<uuid>`, `GET /healthz`). Requires
+  `INTAKE_API_KEY`; factory refuses to start without it.
+- `orchestrator/vt_client.py` — VirusTotal v3 **hash-only** lookup. Never
+  upload sample bytes to VT — that leaks the corpus.
+- `orchestrator/yara_scanner.py` — optional YARA pre-classification
+  (`yara-python` extras). High-severity matches bump job priority.
+- `orchestrator/vm_pool.py` — DB-backed vmid pool (`vm_pool_leases` table).
+  `try_acquire_lease` is a conditional UPSERT; the WHERE guard is the lock.
+  Stale leases get reaped by heartbeat age, so a crashed worker doesn't
+  permanently burn a slot.
 - `guest_agent/` — Windows-side collector. **Stdlib only** + `orchestrator.schema`.
   Runs inside the analysis VM, polls the staging share, drives ProcMon/tshark/RegShot,
   detonates the sample, packages artifacts. Deployed as a PyInstaller-frozen exe.
@@ -54,6 +68,13 @@ making architectural changes.
   atomically renames it into `staging/in-flight/{job_id}/`; guest writes the
   workspace, renames to `staging/completed/{job_id}/`, drops `result.json`
   last. Host polls for `result.json` — don't read other files until it exists.
+- **Intake is the only row-creator for `analysis_jobs`.** The Celery task
+  looks up by id; it never inserts. Sample bytes are staged to
+  `{staging_root}/samples/{analysis_id}/{sample_name}` by intake before
+  enqueue, and the task re-hashes before publishing a manifest to the guest.
+- **VM pool is the only vmid allocator.** Never hard-code vmids in tasks —
+  `VmPool.acquire(analysis_id)` hands out from the configured range and
+  records a lease. Always `pool.release()` in a finally block.
 
 ## Safety rules (non-negotiable)
 
@@ -68,5 +89,5 @@ making architectural changes.
 
 ## Working on feature branches
 
-Development branch for this workstream: `claude/malware-analysis-sandbox-4jmVl`.
+Development branch for this workstream: `claude/intake-service-vm-manager-Azqfw`.
 Commit and push to that branch; don't push to `main`.

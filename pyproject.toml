@@ -17,6 +17,7 @@ dependencies = [
     "proxmoxer>=2.0",
     "requests>=2.31",
     "python-dateutil>=2.9",
+    "flask>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -30,9 +31,14 @@ pcap = [
     # Optional: only needed on hosts that parse PCAPs.
     "scapy>=2.5",
 ]
+yara = [
+    # Optional: enable pre-detonation YARA scanning in the intake pipeline.
+    "yara-python>=4.5",
+]
 
 [project.scripts]
 sandgnat-worker = "orchestrator.worker:main"
+sandgnat-intake = "orchestrator.intake_server:main"
 
 [tool.setuptools.packages.find]
 include = ["orchestrator*"]

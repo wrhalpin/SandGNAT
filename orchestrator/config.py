@@ -29,6 +29,11 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_path(name: str, default: str | None = None) -> str:
+    raw = os.environ.get(name, default)
+    return raw or ""
+
+
 @dataclass(frozen=True)
 class ProxmoxConfig:
     host: str
@@ -42,12 +47,34 @@ class ProxmoxConfig:
 
 
 @dataclass(frozen=True)
+class VmPoolConfig:
+    vmid_min: int
+    vmid_max: int
+    stale_lease_seconds: int
+
+
+@dataclass(frozen=True)
+class IntakeConfig:
+    max_sample_bytes: int
+    min_sample_bytes: int
+    api_key: str
+    bind_host: str
+    bind_port: int
+    yara_rules_dir: str
+    vt_api_key: str
+    vt_base_url: str
+    vt_timeout_seconds: float
+
+
+@dataclass(frozen=True)
 class Settings:
     database_url: str
     broker_url: str
     result_backend: str
 
     proxmox: ProxmoxConfig
+    vm_pool: VmPoolConfig
+    intake: IntakeConfig
 
     analysis_network_cidr: str
     quarantine_root: str
@@ -69,11 +96,29 @@ def get_settings() -> Settings:
         template_vmid=_env_int("PROXMOX_TEMPLATE_VMID", 9000),
         clean_snapshot=_env("PROXMOX_CLEAN_SNAPSHOT", "clean"),
     )
+    vm_pool = VmPoolConfig(
+        vmid_min=_env_int("VM_POOL_VMID_MIN", 9100),
+        vmid_max=_env_int("VM_POOL_VMID_MAX", 9199),
+        stale_lease_seconds=_env_int("VM_POOL_STALE_LEASE_SECONDS", 1800),
+    )
+    intake = IntakeConfig(
+        max_sample_bytes=_env_int("INTAKE_MAX_SAMPLE_BYTES", 128 * 1024 * 1024),
+        min_sample_bytes=_env_int("INTAKE_MIN_SAMPLE_BYTES", 16),
+        api_key=_env("INTAKE_API_KEY", ""),
+        bind_host=_env("INTAKE_BIND_HOST", "127.0.0.1"),
+        bind_port=_env_int("INTAKE_BIND_PORT", 8080),
+        yara_rules_dir=_env_path("INTAKE_YARA_RULES_DIR", ""),
+        vt_api_key=_env("VIRUSTOTAL_API_KEY", ""),
+        vt_base_url=_env("VIRUSTOTAL_BASE_URL", "https://www.virustotal.com/api/v3"),
+        vt_timeout_seconds=float(_env("VIRUSTOTAL_TIMEOUT_SECONDS", "10")),
+    )
     return Settings(
         database_url=_env("DATABASE_URL", required=True),
         broker_url=_env("CELERY_BROKER_URL", "redis://localhost:6379/0"),
         result_backend=_env("CELERY_RESULT_BACKEND", "redis://localhost:6379/1"),
         proxmox=proxmox,
+        vm_pool=vm_pool,
+        intake=intake,
         analysis_network_cidr=_env("ANALYSIS_NETWORK_CIDR", "192.168.100.0/24"),
         quarantine_root=_env("QUARANTINE_ROOT", "/srv/sandgnat/quarantine"),
         artifact_staging_root=_env("ARTIFACT_STAGING_ROOT", "/srv/sandgnat/staging"),
