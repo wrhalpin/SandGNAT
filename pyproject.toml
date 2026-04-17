@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sandgnat-orchestrator"
+version = "0.1.0"
+description = "Malware runtime analysis job orchestrator (Celery, STIX 2.1, Postgres)"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+readme = "README.md"
+dependencies = [
+    "celery>=5.3",
+    "redis>=5.0",
+    "psycopg[binary,pool]>=3.1",
+    "stix2>=3.0",
+    "proxmoxer>=2.0",
+    "requests>=2.31",
+    "python-dateutil>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+pcap = [
+    # Optional: only needed on hosts that parse PCAPs.
+    "scapy>=2.5",
+]
+
+[project.scripts]
+sandgnat-worker = "orchestrator.worker:main"
+
+[tool.setuptools.packages.find]
+include = ["orchestrator*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
