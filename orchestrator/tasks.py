@@ -70,7 +70,21 @@ def enqueue_analysis(
     timeout_seconds: int,
     priority: int,
 ) -> None:
-    """Dispatch the Celery task for a row intake has already inserted."""
+    """Dispatch the entry-point Celery task for a row intake has just inserted.
+
+    When static analysis is enabled (`STATIC_ANALYSIS_ENABLED=1`) we route
+    new submissions through the Linux static-analysis stage first; that task
+    is responsible for chaining the Windows detonation task afterwards (or
+    short-circuiting it). When static is disabled, fall back to the legacy
+    direct-detonation path.
+    """
+    if get_settings().static.enabled:
+        from .tasks_static import enqueue_static_analysis
+
+        enqueue_static_analysis(
+            analysis_id, sample_name, sample_sha256, timeout_seconds, priority
+        )
+        return
     analyze_malware_sample.apply_async(
         args=[str(analysis_id), sample_sha256, sample_name, timeout_seconds],
         priority=priority,

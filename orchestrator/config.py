@@ -54,6 +54,26 @@ class VmPoolConfig:
 
 
 @dataclass(frozen=True)
+class LinuxVmPoolConfig:
+    vmid_min: int
+    vmid_max: int
+    template_vmid: int
+    clean_snapshot: str
+    stale_lease_seconds: int
+
+
+@dataclass(frozen=True)
+class StaticAnalysisConfig:
+    """Knobs for the pre-detonation Linux static-analysis stage."""
+
+    enabled: bool
+    short_circuit_threshold: float       # Jaccard estimate above which we skip detonation
+    short_circuit_flavour: str           # 'byte' | 'opcode' | 'either'
+    timeout_seconds: int
+    yara_deep_rules_dir: str
+
+
+@dataclass(frozen=True)
 class IntakeConfig:
     max_sample_bytes: int
     min_sample_bytes: int
@@ -74,6 +94,8 @@ class Settings:
 
     proxmox: ProxmoxConfig
     vm_pool: VmPoolConfig
+    linux_vm_pool: LinuxVmPoolConfig
+    static: StaticAnalysisConfig
     intake: IntakeConfig
 
     analysis_network_cidr: str
@@ -101,6 +123,22 @@ def get_settings() -> Settings:
         vmid_max=_env_int("VM_POOL_VMID_MAX", 9199),
         stale_lease_seconds=_env_int("VM_POOL_STALE_LEASE_SECONDS", 1800),
     )
+    linux_vm_pool = LinuxVmPoolConfig(
+        vmid_min=_env_int("LINUX_VM_POOL_VMID_MIN", 9200),
+        vmid_max=_env_int("LINUX_VM_POOL_VMID_MAX", 9299),
+        template_vmid=_env_int("LINUX_TEMPLATE_VMID", 9001),
+        clean_snapshot=_env("LINUX_CLEAN_SNAPSHOT", "clean"),
+        stale_lease_seconds=_env_int("LINUX_VM_POOL_STALE_LEASE_SECONDS", 600),
+    )
+    static = StaticAnalysisConfig(
+        enabled=_env_bool("STATIC_ANALYSIS_ENABLED", False),
+        short_circuit_threshold=float(
+            _env("STATIC_SHORT_CIRCUIT_THRESHOLD", "0.85")
+        ),
+        short_circuit_flavour=_env("STATIC_SHORT_CIRCUIT_FLAVOUR", "either"),
+        timeout_seconds=_env_int("STATIC_ANALYSIS_TIMEOUT", 240),
+        yara_deep_rules_dir=_env_path("STATIC_YARA_DEEP_RULES_DIR", ""),
+    )
     intake = IntakeConfig(
         max_sample_bytes=_env_int("INTAKE_MAX_SAMPLE_BYTES", 128 * 1024 * 1024),
         min_sample_bytes=_env_int("INTAKE_MIN_SAMPLE_BYTES", 16),
@@ -118,6 +156,8 @@ def get_settings() -> Settings:
         result_backend=_env("CELERY_RESULT_BACKEND", "redis://localhost:6379/1"),
         proxmox=proxmox,
         vm_pool=vm_pool,
+        linux_vm_pool=linux_vm_pool,
+        static=static,
         intake=intake,
         analysis_network_cidr=_env("ANALYSIS_NETWORK_CIDR", "192.168.100.0/24"),
         quarantine_root=_env("QUARANTINE_ROOT", "/srv/sandgnat/quarantine"),

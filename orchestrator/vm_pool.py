@@ -55,6 +55,7 @@ class PoolStore(Protocol):
         node: str,
         analysis_id: UUID,
         stale_after_seconds: int,
+        guest_type: str = "windows",
     ) -> bool:
         """Atomically claim `vmid` for `analysis_id`. Return True on success."""
 
@@ -80,14 +81,22 @@ class VmPool:
         vmid_max: int,
         node: str,
         stale_lease_seconds: int = 1800,
+        guest_type: str = "windows",
     ) -> None:
         if vmid_min > vmid_max:
             raise ValueError(f"vmid_min {vmid_min} > vmid_max {vmid_max}")
+        if guest_type not in {"windows", "linux"}:
+            raise ValueError(f"unknown guest_type: {guest_type!r}")
         self._store = store
         self._min = vmid_min
         self._max = vmid_max
         self._node = node
         self._stale_after = stale_lease_seconds
+        self._guest_type = guest_type
+
+    @property
+    def guest_type(self) -> str:
+        return self._guest_type
 
     @property
     def capacity(self) -> int:
@@ -104,12 +113,16 @@ class VmPool:
         self._store.reap_stale(self._stale_after)
         for vmid in range(self._min, self._max + 1):
             if self._store.try_acquire_lease(
-                vmid, self._node, analysis_id, self._stale_after
+                vmid, self._node, analysis_id, self._stale_after, self._guest_type
             ):
-                log.info("Acquired vmid=%d for analysis %s", vmid, analysis_id)
+                log.info(
+                    "Acquired vmid=%d (%s) for analysis %s",
+                    vmid, self._guest_type, analysis_id,
+                )
                 return vmid
         raise PoolExhausted(
-            f"no free vmids in [{self._min}, {self._max}] for analysis {analysis_id}"
+            f"no free vmids in [{self._min}, {self._max}] ({self._guest_type}) "
+            f"for analysis {analysis_id}"
         )
 
     def heartbeat(self, vmid: int, analysis_id: UUID) -> None:
@@ -154,6 +167,7 @@ class InMemoryPoolStore:
         node: str,
         analysis_id: UUID,
         stale_after_seconds: int,
+        guest_type: str = "windows",
     ) -> bool:
         lease = self._leases.get(vmid)
         now = datetime.now(timezone.utc)
@@ -168,14 +182,21 @@ class InMemoryPoolStore:
         if not is_free:
             return False
         for existing in self._leases.values():
-            if existing.status == "leased" and existing.analysis_id == analysis_id:
-                # one lease per job at a time
+            if (
+                existing.status == "leased"
+                and existing.analysis_id == analysis_id
+                and existing.guest_type == guest_type
+            ):
+                # one active lease per (job, guest_type) at a time. Different
+                # guest types can coexist (e.g. detonation re-uses the same
+                # job_id after static finishes — but only sequentially).
                 return False
         self._leases[vmid] = VmLease(
             vmid=vmid,
             node=node,
             analysis_id=analysis_id,
             status="leased",
+            guest_type=guest_type,
             acquired_at=now,
             heartbeat_at=now,
         )

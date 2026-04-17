@@ -69,13 +69,25 @@ class FileHashes:
     sha256: str
     md5: str | None = None
     sha1: str | None = None
+    ssdeep: str | None = None
+    tlsh: str | None = None
+    imphash: str | None = None
 
     def as_stix(self) -> dict[str, str]:
+        # SSDEEP and TLSH are part of the STIX 2.1 hash-algorithm-ov; imphash
+        # isn't, so it goes into an `x_`-prefixed extension key (still valid
+        # JSON inside the file.hashes dict).
         out: dict[str, str] = {"SHA-256": self.sha256}
         if self.md5:
             out["MD5"] = self.md5
         if self.sha1:
             out["SHA-1"] = self.sha1
+        if self.ssdeep:
+            out["SSDEEP"] = self.ssdeep
+        if self.tlsh:
+            out["TLSH"] = self.tlsh
+        if self.imphash:
+            out["x_imphash"] = self.imphash
         return out
 
 
