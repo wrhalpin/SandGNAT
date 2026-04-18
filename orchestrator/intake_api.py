@@ -1,16 +1,19 @@
-"""HTTP intake service for sample submissions.
+"""HTTP service: intake write path + read-only export routes.
 
-Thin Flask front-end over `intake.ingest_submission`. The API does three things:
+    POST /submit                          accept a multipart upload, run
+                                           intake, return an IntakeReport.
+    GET  /jobs/<uuid>                     analysis_jobs row for polling.
+    GET  /healthz                         liveness probe.
+    GET  /analyses                        list + filters (export blueprint).
+    GET  /analyses/<uuid>                 one job row.
+    GET  /analyses/<uuid>/bundle          full STIX 2.1 bundle.
+    GET  /analyses/<uuid>/static          static-analysis findings.
+    GET  /analyses/<uuid>/similar         LSH + lineage neighbours.
 
-    POST /submit       accept a multipart upload, run the intake pipeline,
-                       return an IntakeReport as JSON.
-    GET  /jobs/<uuid>  return the row from analysis_jobs for status polling.
-    GET  /healthz      liveness probe.
-
-Auth is a shared API key in the `X-API-Key` header, loaded from
-`INTAKE_API_KEY`. If the env var is empty the server refuses to start — we
-never want an unauthenticated sample uploader accessible on the analysis
-network.
+Auth is a shared `X-API-Key` header, loaded from `INTAKE_API_KEY`. The
+same key guards both intake writes and export reads — a single connector
+secret is enough for the GNAT target audience. If the env var is empty
+the server refuses to start.
 
 Why Flask and not FastAPI: fewer transitive deps (no pydantic/starlette),
 and the surface here is small enough that the typing wins from FastAPI
@@ -21,7 +24,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict
-from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
 from uuid import UUID
@@ -30,6 +32,7 @@ from flask import Flask, jsonify, request
 from werkzeug.exceptions import HTTPException
 
 from .config import IntakeConfig, get_settings
+from .export_api import create_export_blueprint, make_api_key_auth
 from .intake import IntakeReport, ingest_submission
 from .vt_client import VTClient
 from .yara_scanner import YaraScanner
@@ -79,16 +82,8 @@ def create_app(
     app = Flask("sandgnat-intake")
     app.config["MAX_CONTENT_LENGTH"] = cfg.max_sample_bytes + 64 * 1024  # headroom
 
-    def _auth(fn: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(fn)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if require_api_key:
-                presented = request.headers.get("X-API-Key", "")
-                if not presented or presented != cfg.api_key:
-                    return jsonify({"error": "unauthorized"}), 401
-            return fn(*args, **kwargs)
-
-        return wrapper
+    # Shared auth decorator: one key, both blueprints.
+    _auth = make_api_key_auth(cfg, require_api_key=require_api_key)
 
     @app.errorhandler(HTTPException)
     def _http_error(exc: HTTPException):  # type: ignore[no-untyped-def]
@@ -149,6 +144,14 @@ def create_app(
         if job is None:
             return jsonify({"error": "not found"}), 404
         return jsonify(_job_to_json(job))
+
+    # Register read-only export blueprint. The GNAT connector consumes
+    # these routes for bulk pulls and per-job detail queries.
+    app.register_blueprint(
+        create_export_blueprint(
+            resolved_store, cfg=cfg, require_api_key=require_api_key
+        )
+    )
 
     return app
 

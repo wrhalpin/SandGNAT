@@ -31,6 +31,7 @@ network traffic, process trees), and emit STIX 2.1 objects into PostgreSQL.
 │   ├── intake_server.py          CLI entry point for the intake service
 │   ├── vt_client.py              VirusTotal v3 hash-lookup client (no upload)
 │   ├── yara_scanner.py           Optional YARA pre-classification
+│   ├── export_api.py             Read-only Flask blueprint for GNAT connector
 │   ├── tasks.py                  Celery tasks (analyze_malware_sample)
 │   ├── tasks_static.py           Celery static_analyze_sample (Linux pre-stage)
 │   └── parsers/                  Artifact parsers (ProcMon, RegShot, PCAP)
@@ -83,6 +84,26 @@ curl -sS -H "X-API-Key: $INTAKE_API_KEY" \
      http://localhost:8080/jobs/<analysis_id>
 ```
 
+## Querying results (GNAT connector surface)
+
+Read-only endpoints on the same service, same `X-API-Key`. These are the
+contract the `gnat.connectors.sandgnat` connector consumes:
+
+```
+GET /analyses                     list + filters (sha256, status, since), paginated
+GET /analyses/<uuid>              one job row
+GET /analyses/<uuid>/bundle       full STIX 2.1 bundle (409 if not completed)
+GET /analyses/<uuid>/static       static-analysis findings + fuzzy hashes
+GET /analyses/<uuid>/similar      LSH + lineage neighbours (threshold, flavour, limit)
+```
+
+Example — pull every completed analysis from the last hour:
+
+```bash
+curl -sS -H "X-API-Key: $INTAKE_API_KEY" \
+     "http://localhost:8080/analyses?status=completed&since=$(date -u -d '1 hour ago' +%FT%TZ)"
+```
+
 Env knobs for intake:
 
 | Variable                  | Purpose                                                |
@@ -104,13 +125,18 @@ Env knobs for intake:
 
 ## Status
 
-Phases 1–4 complete: scaffold, host<->guest detonation protocol, analyzer,
-intake service, DB-backed Proxmox VM pool manager, and a **Linux
-static-analysis pre-stage** with byte/opcode trigram MinHash signatures
-and LSH-banded near-duplicate short-circuit. New submissions that match an
-already-analysed sample above the configured Jaccard threshold (default
-0.85) skip Windows detonation and are linked back to the parent analysis
-via `analysis_lineage`.
+Phases 1–5 complete:
 
-Phase 5 is end-to-end orchestration testing against real Proxmox + Postgres
-plus TI-platform connectors for STIX export.
+1. Scaffold, Postgres schema, STIX factories.
+2. Host↔guest detonation protocol + analyzer turning artifacts into STIX.
+3. Intake service (HTTP API + VT hash pre-check + YARA) and DB-backed VM
+   pool manager.
+4. Linux static-analysis pre-stage with byte/opcode trigram MinHash and
+   LSH-banded near-duplicate short-circuit.
+5. **Read-only export API** for external consumers. The GNAT TIP connector
+   (in the separate `wrhalpin/GNAT` repo) pulls completed analyses over
+   HTTP — STIX bundles, per-job static findings, and similarity neighbours
+   — without needing direct Postgres access.
+
+Next up: end-to-end orchestration testing against real Proxmox + Postgres,
+plus push-on-completion if bulk pulling doesn't cover GNAT's ingest needs.

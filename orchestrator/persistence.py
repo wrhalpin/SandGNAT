@@ -22,10 +22,25 @@ from .models import (
     LineageEdge,
     NetworkIOC,
     RegistryModification,
+    SimilarityNeighbor,
     StaticAnalysisRow,
     VmLease,
 )
 from .trigrams import MinHashSignature, NUM_BANDS
+
+# Shared SELECT list for analysis_jobs reads. Keep this in sync with
+# _row_to_job() below — adding a column means updating both.
+_JOB_COLUMNS = """
+    id, sample_hash_sha256, sample_name, sample_mime_type, status,
+    sample_hash_md5, sample_hash_sha1, sample_size_bytes,
+    submitter, intake_source, intake_decision, intake_notes, priority,
+    vt_verdict, vt_detection_count, vt_total_engines, vt_last_seen,
+    yara_matches, submitted_at, started_at, completed_at,
+    duration_seconds, timeout_seconds, network_isolation,
+    evasion_observed, quarantine_path,
+    imphash, ssdeep, tlsh, static_completed_at,
+    near_duplicate_of, near_duplicate_score
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -83,14 +98,8 @@ def find_job_by_sha256(sha256: str) -> AnalysisJob | None:
     """Return the most-recent non-failed job for a hash, or None."""
     with connection() as conn, conn.cursor() as cur:
         cur.execute(
-            """
-            SELECT id, sample_hash_sha256, sample_name, sample_mime_type, status,
-                   sample_hash_md5, sample_hash_sha1, sample_size_bytes,
-                   submitter, intake_source, intake_decision, intake_notes, priority,
-                   vt_verdict, vt_detection_count, vt_total_engines, vt_last_seen,
-                   yara_matches, submitted_at, started_at, completed_at,
-                   duration_seconds, timeout_seconds, network_isolation,
-                   evasion_observed, quarantine_path
+            f"""
+            SELECT {_JOB_COLUMNS}
             FROM analysis_jobs
             WHERE sample_hash_sha256 = %s
             ORDER BY submitted_at DESC
@@ -105,14 +114,8 @@ def find_job_by_sha256(sha256: str) -> AnalysisJob | None:
 def get_job(job_id: UUID) -> AnalysisJob | None:
     with connection() as conn, conn.cursor() as cur:
         cur.execute(
-            """
-            SELECT id, sample_hash_sha256, sample_name, sample_mime_type, status,
-                   sample_hash_md5, sample_hash_sha1, sample_size_bytes,
-                   submitter, intake_source, intake_decision, intake_notes, priority,
-                   vt_verdict, vt_detection_count, vt_total_engines, vt_last_seen,
-                   yara_matches, submitted_at, started_at, completed_at,
-                   duration_seconds, timeout_seconds, network_isolation,
-                   evasion_observed, quarantine_path
+            f"""
+            SELECT {_JOB_COLUMNS}
             FROM analysis_jobs
             WHERE id = %s
             """,
@@ -150,7 +153,207 @@ def _row_to_job(row: Any) -> AnalysisJob:
         network_isolation=row[23] if row[23] is not None else True,
         evasion_observed=row[24] if row[24] is not None else False,
         quarantine_path=row[25],
+        imphash=row[26],
+        ssdeep=row[27],
+        tlsh=row[28],
+        static_completed_at=row[29],
+        near_duplicate_of=row[30],
+        near_duplicate_score=float(row[31]) if row[31] is not None else None,
     )
+
+
+def list_jobs(
+    *,
+    sha256: str | None = None,
+    status: JobStatus | None = None,
+    since: datetime | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[AnalysisJob]:
+    """Filtered, paginated list of analysis jobs.
+
+    All filters are optional; with none set this returns the most-recent
+    `limit` rows. The query is assembled with bind parameters only — never
+    string-interpolate user input into SQL.
+    """
+    clauses: list[str] = []
+    params: list[Any] = []
+    if sha256 is not None:
+        clauses.append("sample_hash_sha256 = %s")
+        params.append(sha256)
+    if status is not None:
+        clauses.append("status = %s")
+        params.append(status.value)
+    if since is not None:
+        clauses.append("submitted_at >= %s")
+        params.append(since)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    sql = f"""
+        SELECT {_JOB_COLUMNS}
+        FROM analysis_jobs
+        {where}
+        ORDER BY submitted_at DESC
+        LIMIT %s OFFSET %s
+    """
+    params.extend([int(limit), int(offset)])
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    return [_row_to_job(row) for row in rows]
+
+
+def get_static_analysis(analysis_id: UUID) -> StaticAnalysisRow | None:
+    """Read the static_analysis row for a job, or None if absent.
+
+    Absent is normal: static analysis is opt-in (`STATIC_ANALYSIS_ENABLED=1`),
+    and jobs that haven't reached static yet won't have a row either.
+    """
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT analysis_id, file_format, architecture, entry_point,
+                   is_packed_heuristic, section_count, overall_entropy,
+                   imports, exports, sections, strings_summary,
+                   capa_capabilities, deep_yara_matches, raw_envelope
+            FROM static_analysis
+            WHERE analysis_id = %s
+            """,
+            (analysis_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return StaticAnalysisRow(
+        analysis_id=row[0],
+        file_format=row[1],
+        architecture=row[2],
+        entry_point=row[3],
+        is_packed_heuristic=row[4],
+        section_count=row[5],
+        overall_entropy=float(row[6]) if row[6] is not None else None,
+        imports=row[7],
+        exports=row[8],
+        sections=row[9] or [],
+        strings_summary=row[10],
+        capa_capabilities=row[11] or [],
+        deep_yara_matches=list(row[12] or []),
+        raw_envelope=row[13] or {},
+    )
+
+
+def list_similar(
+    analysis_id: UUID,
+    *,
+    threshold: float = 0.5,
+    limit: int = 25,
+    flavour: str = "either",
+) -> list[SimilarityNeighbor]:
+    """Similarity neighbours for `analysis_id`, union of two sources.
+
+    `sample_similarity` stores pairwise edges keyed by `left<right`, so we
+    query both directions and normalise the peer analysis_id.
+    `analysis_lineage` stores parent edges when the job was marked a
+    near-duplicate; those are always 'near_duplicate' relations.
+
+    Peers are deduped keeping the highest score; 'near_duplicate' always
+    wins the relation tie because the pipeline explicitly flagged it.
+    """
+    flavour_clauses = ""
+    flavour_params: list[Any] = []
+    if flavour in {"byte", "opcode"}:
+        flavour_clauses = " AND flavour = %s"
+        flavour_params.append(flavour)
+    elif flavour != "either":
+        raise ValueError(f"unknown flavour {flavour!r}")
+
+    peers: dict[UUID, SimilarityNeighbor] = {}
+
+    with connection() as conn, conn.cursor() as cur:
+        # sample_similarity: peer could be on either side of the canonical
+        # (left<right) ordering — fetch both directions and normalise.
+        cur.execute(
+            f"""
+            SELECT right_analysis_id AS peer, flavour, similarity_score
+              FROM sample_similarity
+             WHERE left_analysis_id = %s AND similarity_score >= %s
+                   {flavour_clauses}
+            UNION ALL
+            SELECT left_analysis_id AS peer, flavour, similarity_score
+              FROM sample_similarity
+             WHERE right_analysis_id = %s AND similarity_score >= %s
+                   {flavour_clauses}
+            """,
+            [analysis_id, threshold, *flavour_params,
+             analysis_id, threshold, *flavour_params],
+        )
+        similarity_rows = cur.fetchall()
+
+        # analysis_lineage: child->parent edges, near_duplicate relations.
+        cur.execute(
+            """
+            SELECT parent_analysis_id, similarity_score
+              FROM analysis_lineage
+             WHERE child_analysis_id = %s
+                   AND relation = 'near_duplicate'
+                   AND (similarity_score IS NULL OR similarity_score >= %s)
+            """,
+            (analysis_id, threshold),
+        )
+        lineage_rows = cur.fetchall()
+
+        # Fetch peer sample_sha256 in one lookup — small N, one IN query.
+        peer_ids: set[UUID] = {r[0] for r in similarity_rows} | {r[0] for r in lineage_rows}
+        sha_by_id: dict[UUID, str] = {}
+        if peer_ids:
+            cur.execute(
+                "SELECT id, sample_hash_sha256 FROM analysis_jobs WHERE id = ANY(%s)",
+                (list(peer_ids),),
+            )
+            sha_by_id = dict(cur.fetchall())
+
+    for peer_id, peer_flavour, score in similarity_rows:
+        neighbor = SimilarityNeighbor(
+            analysis_id=peer_id,
+            sample_sha256=sha_by_id.get(peer_id),
+            similarity=float(score),
+            flavour=peer_flavour,
+            relation="similar",
+        )
+        _merge_neighbor(peers, neighbor)
+
+    for peer_id, score in lineage_rows:
+        effective_flavour = flavour if flavour in {"byte", "opcode"} else "byte"
+        neighbor = SimilarityNeighbor(
+            analysis_id=peer_id,
+            sample_sha256=sha_by_id.get(peer_id),
+            similarity=float(score) if score is not None else 1.0,
+            flavour=effective_flavour,
+            relation="near_duplicate",
+        )
+        _merge_neighbor(peers, neighbor)
+
+    ranked = sorted(peers.values(), key=lambda n: n.similarity, reverse=True)
+    return ranked[: max(0, limit)]
+
+
+def _merge_neighbor(
+    peers: dict[UUID, SimilarityNeighbor], incoming: SimilarityNeighbor
+) -> None:
+    """Dedupe by peer id, keeping the best (higher score; near_duplicate
+    wins ties)."""
+    existing = peers.get(incoming.analysis_id)
+    if existing is None:
+        peers[incoming.analysis_id] = incoming
+        return
+    if incoming.similarity > existing.similarity:
+        peers[incoming.analysis_id] = incoming
+        return
+    if (
+        incoming.similarity == existing.similarity
+        and incoming.relation == "near_duplicate"
+        and existing.relation != "near_duplicate"
+    ):
+        peers[incoming.analysis_id] = incoming
 
 
 class PostgresJobStore:
@@ -164,6 +367,38 @@ class PostgresJobStore:
 
     def get_job(self, job_id: UUID) -> AnalysisJob | None:
         return get_job(job_id)
+
+    # Read-side wrappers consumed by export_api.create_export_blueprint.
+    def list_jobs(
+        self,
+        *,
+        sha256: str | None = None,
+        status: JobStatus | None = None,
+        since: datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[AnalysisJob]:
+        return list_jobs(
+            sha256=sha256, status=status, since=since, limit=limit, offset=offset
+        )
+
+    def get_static_analysis(self, analysis_id: UUID) -> StaticAnalysisRow | None:
+        return get_static_analysis(analysis_id)
+
+    def list_similar(
+        self,
+        analysis_id: UUID,
+        *,
+        threshold: float = 0.5,
+        limit: int = 25,
+        flavour: str = "either",
+    ) -> list[SimilarityNeighbor]:
+        return list_similar(
+            analysis_id, threshold=threshold, limit=limit, flavour=flavour
+        )
+
+    def export_bundle(self, analysis_id: UUID) -> dict[str, Any]:
+        return export_bundle(analysis_id)
 
 
 def update_job_status(
