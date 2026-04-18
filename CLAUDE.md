@@ -30,9 +30,18 @@ making architectural changes.
 - `orchestrator/intake.py` — sample intake pipeline (validate → hash → dedupe
   → VT hash lookup → YARA scan → stage bytes → insert row → enqueue). Takes
   injectable `JobStore` + `Enqueuer` so tests run offline.
-- `orchestrator/intake_api.py` + `intake_server.py` — Flask HTTP front-end
-  (`POST /submit`, `GET /jobs/<uuid>`, `GET /healthz`). Requires
-  `INTAKE_API_KEY`; factory refuses to start without it.
+- `orchestrator/intake_api.py` + `intake_server.py` — Flask HTTP front-end.
+  Intake endpoints (`POST /submit`, `GET /jobs/<uuid>`, `GET /healthz`) live
+  here directly; read-only export endpoints are a blueprint from
+  `export_api.py` registered onto the same app. Requires `INTAKE_API_KEY`;
+  factory refuses to start without it.
+- `orchestrator/export_api.py` — read-only Flask blueprint consumed by the
+  `gnat.connectors.sandgnat` connector (in the separate `wrhalpin/GNAT`
+  repo). Routes: `GET /analyses`, `GET /analyses/<uuid>`,
+  `GET /analyses/<uuid>/bundle`, `GET /analyses/<uuid>/static`,
+  `GET /analyses/<uuid>/similar`. All SQL goes through `persistence.py`;
+  the blueprint only calls `ExportStore` protocol methods, so tests use an
+  in-memory fake.
 - `orchestrator/vt_client.py` — VirusTotal v3 **hash-only** lookup. Never
   upload sample bytes to VT — that leaks the corpus.
 - `orchestrator/yara_scanner.py` — optional YARA pre-classification
@@ -104,6 +113,12 @@ making architectural changes.
   task either short-circuits (near-duplicate found above the configured
   Jaccard threshold) or chains the detonation task itself. Detonation
   never inserts the job row — intake still does, just like before.
+- **The export API is the GNAT integration surface.** External consumers
+  (specifically the `gnat.connectors.sandgnat` connector in
+  `wrhalpin/GNAT`) pull from HTTP, not from Postgres. Adding new read
+  functionality means adding a query function to `persistence.py` and a
+  route to `export_api.py` — never teaching a second module to read from
+  the DB directly.
 
 ## Safety rules (non-negotiable)
 

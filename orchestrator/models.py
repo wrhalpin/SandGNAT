@@ -53,6 +53,13 @@ class AnalysisJob:
     vt_total_engines: int | None = None
     vt_last_seen: datetime | None = None
     yara_matches: list[str] = field(default_factory=list)
+    # Static-analysis fingerprint fields (populated by Phase 4 static stage).
+    imphash: str | None = None
+    ssdeep: str | None = None
+    tlsh: str | None = None
+    static_completed_at: datetime | None = None
+    near_duplicate_of: UUID | None = None
+    near_duplicate_score: float | None = None
 
 
 @dataclass(slots=True)
@@ -93,6 +100,26 @@ class LineageEdge:
     parent_analysis_id: UUID
     relation: str  # 'near_duplicate' | 'reanalysis' | 'manual_link'
     similarity_score: float | None = None
+
+
+@dataclass(slots=True)
+class SimilarityNeighbor:
+    """One similar-sample hit returned by the /analyses/<id>/similar endpoint.
+
+    Merges two data sources:
+      * `sample_similarity` — LSH-cached pairwise edges from Phase 4.
+      * `analysis_lineage` — explicit near-duplicate short-circuit parents.
+
+    `relation` is 'near_duplicate' when the edge came from lineage (the
+    scanner marked this as a clear duplicate), 'similar' when it came from
+    the LSH similarity cache only.
+    """
+
+    analysis_id: UUID
+    sample_sha256: str | None
+    similarity: float
+    flavour: str  # 'byte' | 'opcode'
+    relation: str  # 'near_duplicate' | 'similar'
 
 
 @dataclass(slots=True)
