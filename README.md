@@ -4,7 +4,18 @@ Automated malware runtime-analysis environment: detonate suspicious binaries in
 isolated Windows VMs, capture behavioural artifacts (registry deltas, file I/O,
 network traffic, process trees), and emit STIX 2.1 objects into PostgreSQL.
 
-**Full design:** [`docs/MALWARE_ANALYSIS_SYSTEM_DESIGN.md`](docs/MALWARE_ANALYSIS_SYSTEM_DESIGN.md)
+**Full documentation:** [`docs/`](docs/) — organised by the
+[Diátaxis](https://diataxis.fr/) framework (tutorials, how-to guides,
+reference, explanation).
+
+**Canonical design:** [`docs/MALWARE_ANALYSIS_SYSTEM_DESIGN.md`](docs/MALWARE_ANALYSIS_SYSTEM_DESIGN.md)
+
+**Quick starting points:**
+
+- New here? → [tutorials/01-your-first-sample.md](docs/tutorials/01-your-first-sample.md)
+- Setting up a dev stack? → [tutorials/02-local-dev-stack.md](docs/tutorials/02-local-dev-stack.md)
+- Architecture tour? → [explanation/architecture.md](docs/explanation/architecture.md)
+- API reference? → [reference/http-api.md](docs/reference/http-api.md)
 
 ## Repository layout
 
