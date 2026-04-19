@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """RegShot diff parser.
 
 RegShot emits a human-readable diff with section headers like:
@@ -52,6 +54,10 @@ HIVE_PREFIXES = ("HKLM", "HKCU", "HKU", "HKCR", "HKCC")
 
 @dataclass(frozen=True, slots=True)
 class RegistryDelta:
+    """One before/after diff row from RegShot. `persistence_indicator` is
+    True for classic auto-run locations (Run keys, Winlogon, Services,
+    etc.); those get promoted to STIX indicators by the analyzer."""
+
     action: str  # 'added' | 'modified' | 'deleted'
     target: str  # 'key' | 'value'
     hive: str
@@ -94,6 +100,8 @@ def _parse_value_line(line: str) -> tuple[str, str | None, str | None]:
 
 
 def parse_regshot_diff(source: Path | Iterable[str]) -> list[RegistryDelta]:
+    """Parse a RegShot diff file (or an already-loaded iterable of lines)
+    into `RegistryDelta` records. Pure — no IO beyond reading `source`."""
     if isinstance(source, Path):
         with source.open("r", encoding="utf-8", errors="replace") as fh:
             return list(_iter_deltas(fh))

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the YARA scanner wrapper.
 
 Most environments won't have libyara installed; when that's the case these

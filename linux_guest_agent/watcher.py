@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Polling watcher for the Linux static-analysis guest.
 
 Identical staging contract to `guest_agent/watcher.py`:
@@ -162,6 +164,7 @@ def _process_one(
 
 
 def serve(cfg: LinuxGuestConfig, *, run_once: bool = False) -> None:
+    """Main loop. Set `run_once=True` in tests to process a single job."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",

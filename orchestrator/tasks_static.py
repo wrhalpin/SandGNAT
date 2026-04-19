@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Pre-detonation static-analysis Celery task.
 
 This task runs *before* `analyze_malware_sample` in the new pipeline shape:

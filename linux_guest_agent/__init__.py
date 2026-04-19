@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Linux static-analysis guest agent.
 
 Mirror of `guest_agent/` for the dedicated Linux static-analysis VM.

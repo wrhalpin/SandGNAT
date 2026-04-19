@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """STIX 2.1 object factories.
 
 All STIX objects persisted by SandGNAT pass through this module. IDs are
@@ -66,6 +68,12 @@ def analysis_metadata(
 
 @dataclass(frozen=True)
 class FileHashes:
+    """Container for everything we know that identifies a file.
+
+    SHA-256 is required; everything else is optional. `as_stix()` serialises
+    into the STIX `file.hashes` vocabulary.
+    """
+
     sha256: str
     md5: str | None = None
     sha1: str | None = None
@@ -74,6 +82,11 @@ class FileHashes:
     imphash: str | None = None
 
     def as_stix(self) -> dict[str, str]:
+        """Serialise into a STIX 2.1 `file.hashes`-compatible dict.
+
+        SSDEEP and TLSH are in the standard `hash-algorithm-ov`; imphash is
+        not, so it's emitted as the `x_imphash` extension key.
+        """
         # SSDEEP and TLSH are part of the STIX 2.1 hash-algorithm-ov; imphash
         # isn't, so it goes into an `x_`-prefixed extension key (still valid
         # JSON inside the file.hashes dict).
@@ -101,6 +114,12 @@ def build_malware(
     object_refs: Iterable[str] = (),
     confidence_level: int | None = None,
 ) -> dict[str, Any]:
+    """Build a STIX 2.1 `malware` SDO wrapping one analysis.
+
+    The id is derived from `(analysis_id, sample_hash_sha256)` so re-ingest
+    produces the same object. `object_refs` should be every SCO + indicator
+    the analyzer produced for this job.
+    """
     now = _now_iso()
     obj: dict[str, Any] = {
         "type": "malware",
@@ -135,6 +154,12 @@ def build_file(
     quarantine_path: str | None = None,
     disposition: str | None = None,
 ) -> dict[str, Any]:
+    """Build a STIX 2.1 `file` SCO — for the sample itself or a dropped file.
+
+    Natural key is the SHA-256, so two dropped files with identical bytes
+    collapse to the same id. Use `created_by_process_ref` to link a dropped
+    file back to the `process` that wrote it.
+    """
     obj: dict[str, Any] = {
         "type": "file",
         "spec_version": "2.1",
@@ -168,6 +193,13 @@ def build_process(
     child_process_refs: Iterable[str] = (),
     registry_modifications: Iterable[dict[str, Any]] = (),
 ) -> dict[str, Any]:
+    """Build a STIX 2.1 `process` SCO for one observed PID.
+
+    One object per distinct PID, grouping its registry modifications and
+    parent/child links. Registry-level detail is carried as an
+    `x_registry_modifications` extension so consumers don't need to join
+    the normalised `registry_modifications` table.
+    """
     obj: dict[str, Any] = {
         "type": "process",
         "spec_version": "2.1",
@@ -205,6 +237,12 @@ def build_network_traffic(
     end: str | None = None,
     http_headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    """Build a STIX 2.1 `network-traffic` SCO for one PCAP-derived flow.
+
+    `src_ref`/`dst_ref` must already be `ipv4-addr`/`ipv6-addr`/`domain-name`
+    SCO ids emitted alongside this object. HTTP headers (if recovered by
+    the PCAP parser) travel as `x_http_headers`.
+    """
     natural_key = f"{src_ref}->{dst_ref}:{dst_port}@{start}"
     obj: dict[str, Any] = {
         "type": "network-traffic",
@@ -237,6 +275,12 @@ def build_indicator(
     confidence_level: int | None = None,
     observable_refs: Iterable[str] = (),
 ) -> dict[str, Any]:
+    """Build a STIX 2.1 `indicator` SDO around a STIX pattern.
+
+    Emitted for persistence-flagged registry keys and confirmed network
+    IOCs. `observable_refs` links the indicator to the SCOs it matches via
+    the `x_observable_refs` extension.
+    """
     now = _now_iso()
     obj: dict[str, Any] = {
         "type": "indicator",

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Postgres connection pool.
 
 All SQL in the orchestrator goes through this module via `persistence.py`.

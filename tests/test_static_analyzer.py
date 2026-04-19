@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for `orchestrator.static_analysis.parse_static_workspace`.
 
 We fabricate a `completed/` workspace containing a static envelope JSON

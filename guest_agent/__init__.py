@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """SandGNAT guest agent.
 
 Runs inside the Windows analysis VM. Polls the staging share for a job

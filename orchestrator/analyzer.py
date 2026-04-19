@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Turn guest artifacts into STIX objects and normalised DB rows.
 
 The analyzer is the bridge between `guest_driver.ArtifactLocations` and
@@ -40,6 +42,9 @@ log = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class AnalyzedBundle:
+    """Return value of `analyze()`: everything a Celery task needs to hand
+    to `persistence` for a completed detonation."""
+
     stix_objects: list[dict[str, Any]] = field(default_factory=list)
     dropped_files: list[DroppedFile] = field(default_factory=list)
     registry_modifications: list[RegistryModification] = field(default_factory=list)

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Entry point for the intake HTTP service.
 
 Run: `sandgnat-intake` (installed by pyproject) which is equivalent to

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the intake pipeline.
 
 The pipeline is exercised with in-memory fakes for the `JobStore` and

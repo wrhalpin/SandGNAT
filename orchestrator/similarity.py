@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Banded-LSH similarity lookup over MinHash signatures.
 
 Companion to `trigrams.py`. Given a fresh sample's MinHash signature, we
@@ -38,6 +40,8 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class SimilarityHit:
+    """One ranked neighbour returned by `find_similar`."""
+
     analysis_id: UUID
     sample_sha256: str
     flavour: str  # 'byte' | 'opcode'

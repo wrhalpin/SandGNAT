@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Test-suite-wide fixtures and environment.
 
 `orchestrator.celery_app._make_app()` calls `get_settings()` at module-load

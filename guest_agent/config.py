@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Guest-side configuration.
 
 All knobs come from environment variables so the service can be reconfigured
@@ -22,6 +24,12 @@ def _env_float(name: str, default: float) -> float:
 
 @dataclass(frozen=True, slots=True)
 class GuestConfig:
+    """Env-loaded configuration for the Windows detonation guest.
+
+    Paths reflect the FLARE-VM defaults; override via env if a template
+    installs tools elsewhere.
+    """
+
     # Path to the staging share as seen from *inside* the guest. Typically a
     # mapped drive or UNC path, e.g. r"\\192.168.100.1\analysis".
     staging_root: Path
@@ -38,6 +46,7 @@ class GuestConfig:
 
 
 def load_config() -> GuestConfig:
+    """Build a `GuestConfig` from the process environment."""
     return GuestConfig(
         staging_root=Path(_env("SANDGNAT_STAGING_ROOT", r"\\192.168.100.1\analysis")),
         work_root=Path(_env("SANDGNAT_WORK_ROOT", r"C:\sandgnat")),

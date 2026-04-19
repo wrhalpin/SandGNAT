@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """PCAP parser.
 
 Delegates packet decoding to `scapy` (optional dependency; install the
@@ -12,14 +14,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # pragma: no cover
-    pass
 
 
 @dataclass(slots=True)
 class PcapFlow:
+    """One aggregated flow extracted from a PCAP.
+
+    Keyed on the 5-tuple (src_ip, dst_ip, src_port, dst_port, protocol).
+    Packet count + byte total + DNS queries are accumulated across every
+    packet matching the tuple.
+    """
+
     src_ip: str
     dst_ip: str
     src_port: int | None

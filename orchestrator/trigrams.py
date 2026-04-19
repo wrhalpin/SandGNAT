@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Byte + opcode trigram extraction and MinHash signatures.
 
 Stdlib only — both the Linux static-analysis guest and the host orchestrator
@@ -71,10 +73,13 @@ class MinHashSignature:
             )
 
     def to_bytes(self) -> bytes:
+        """Pack the signature into its on-wire form (little-endian uint32 array)."""
         return struct.pack(f"<{NUM_PERMUTATIONS}I", *self.values)
 
     @classmethod
     def from_bytes(cls, blob: bytes, *, cardinality: int, version: int = SIGNATURE_VERSION) -> "MinHashSignature":
+        """Inverse of `to_bytes`. `cardinality` must come from an external
+        source (it's not derivable from the signature alone)."""
         if len(blob) != _SIGNATURE_BYTES:
             raise ValueError(
                 f"MinHash blob must be exactly {_SIGNATURE_BYTES} bytes, got {len(blob)}"
@@ -205,6 +210,8 @@ def minhash_opcodes(mnemonics: Iterable[str]) -> MinHashSignature:
 # ---------------------------------------------------------------------------
 
 def true_jaccard(a: Iterable, b: Iterable) -> float:
+    """Exact Jaccard similarity of two iterables. Used by tests to verify
+    that MinHash-estimated similarity tracks the real value."""
     set_a = set(a)
     set_b = set(b)
     if not set_a and not set_b:

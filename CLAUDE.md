@@ -77,6 +77,9 @@ making architectural changes.
 
 ## Conventions
 
+- **Licence:** Apache-2.0. Every source file starts with an SPDX header —
+  `# SPDX-License-Identifier: Apache-2.0` and `# Copyright 2026 Bill Halpin`
+  (or `--` for SQL). New files must include it.
 - **Python 3.11+**, type-hinted. `psycopg` (v3) for Postgres. `stix2` for STIX.
   `celery` + `redis` for the queue. `proxmoxer` for Proxmox API.
 - **IDs:** every STIX object gets a deterministic UUIDv5 derived from

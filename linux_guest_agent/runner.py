@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Per-job static-analysis pipeline.
 
 Mirror of `guest_agent/runner.py` for the Linux static stage. Reads the
@@ -41,6 +43,12 @@ def _iso_now() -> str:
 def run_static_job(
     manifest: JobManifest, config: LinuxGuestConfig, workspace: Path
 ) -> ResultEnvelope:
+    """Run the full static-analysis pipeline for one claimed job.
+
+    Reads the sample once, fans it out to each enabled tool, writes the
+    consolidated envelope + two trigram blobs into `workspace`, and
+    returns a `ResultEnvelope` ready for the watcher to atomically publish.
+    """
     workspace.mkdir(parents=True, exist_ok=True)
     started_at = _iso_now()
     errors: list[str] = []

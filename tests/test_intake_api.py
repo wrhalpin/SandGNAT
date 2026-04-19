@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the Flask intake API.
 
 We build the app with injected fakes — no Postgres, no Celery, no VT. The

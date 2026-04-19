@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """ProcMon wrapper.
 
 ProcMon is controlled via its CLI:

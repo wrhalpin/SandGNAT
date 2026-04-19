@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Branch-coverage test for `tasks_static.static_analyze_sample`.
 
 We don't run the actual Celery task (that requires a broker + Postgres +

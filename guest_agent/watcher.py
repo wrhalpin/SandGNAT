@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Watch the staging share and process one job at a time.
 
 The guest agent is single-threaded by design: concurrent detonations in the

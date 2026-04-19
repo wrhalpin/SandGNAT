@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Celery tasks for the analysis lifecycle.
 
 The `analyze_malware_sample` task assumes intake has already:

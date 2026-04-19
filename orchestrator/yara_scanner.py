@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """YARA pre-classification for intake.
 
 Scans submitted samples against a directory of YARA rule files before we
@@ -30,6 +32,8 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class YaraMatch:
+    """One rule hit plus its tags and meta dict (stringified for transport)."""
+
     rule: str
     tags: tuple[str, ...] = ()
     meta: dict[str, str] | None = None
@@ -43,6 +47,12 @@ class YaraScanner:
     """
 
     def __init__(self, rules_dir: str | Path | None) -> None:
+        """Compile every `.yar`/`.yara` file under `rules_dir` eagerly.
+
+        Compile errors surface at construction — operators find out about
+        broken rules on service boot, not on the first sample submission.
+        `rules_dir=None` or missing libyara leaves the scanner disabled.
+        """
         self._rules_dir = Path(rules_dir) if rules_dir else None
         self._rules = None
         if not _YARA_AVAILABLE:
@@ -61,6 +71,7 @@ class YaraScanner:
         return self._rules is not None
 
     def scan_bytes(self, data: bytes) -> list[YaraMatch]:
+        """Scan an in-memory buffer. Returns [] when disabled or on error."""
         if self._rules is None:
             return []
         try:
@@ -71,6 +82,7 @@ class YaraScanner:
         return [_match_to_record(m) for m in raw]
 
     def scan_path(self, path: str | Path) -> list[YaraMatch]:
+        """Scan a file by path. Same error contract as `scan_bytes`."""
         if self._rules is None:
             return []
         try:

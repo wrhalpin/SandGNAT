@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Read-only HTTP API for analysis results.
 
 Target consumer: the `gnat.connectors.sandgnat` connector in the GNAT

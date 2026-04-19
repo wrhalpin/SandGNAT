@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Unit tests for the STIX builder — no Postgres or Proxmox dependency."""
 
 from __future__ import annotations

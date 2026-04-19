@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Environment-backed configuration.
 
 All runtime knobs live here. Never hard-code hosts, tokens, or paths elsewhere.
@@ -36,6 +38,8 @@ def _env_path(name: str, default: str | None = None) -> str:
 
 @dataclass(frozen=True)
 class ProxmoxConfig:
+    """Proxmox API connection + Windows-template lookup details."""
+
     host: str
     user: str
     token_name: str
@@ -48,6 +52,8 @@ class ProxmoxConfig:
 
 @dataclass(frozen=True)
 class VmPoolConfig:
+    """Windows-detonation VM pool bounds + stale-lease reclamation window."""
+
     vmid_min: int
     vmid_max: int
     stale_lease_seconds: int
@@ -55,6 +61,13 @@ class VmPoolConfig:
 
 @dataclass(frozen=True)
 class LinuxVmPoolConfig:
+    """Linux-static VM pool bounds + its own template/snapshot names.
+
+    Kept separate from `VmPoolConfig` because the Linux pool has a different
+    template vmid and clean snapshot; sharing one config type would collapse
+    two genuinely different deployments into one surface.
+    """
+
     vmid_min: int
     vmid_max: int
     template_vmid: int
@@ -75,6 +88,8 @@ class StaticAnalysisConfig:
 
 @dataclass(frozen=True)
 class IntakeConfig:
+    """Knobs for the HTTP intake service: upload limits, auth, VT+YARA."""
+
     max_sample_bytes: int
     min_sample_bytes: int
     api_key: str
@@ -88,6 +103,11 @@ class IntakeConfig:
 
 @dataclass(frozen=True)
 class Settings:
+    """Everything the orchestrator needs to run, assembled from env vars.
+
+    Immutable + cached; `get_settings()` is the only entry point.
+    """
+
     database_url: str
     broker_url: str
     result_backend: str
@@ -108,6 +128,12 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """Build a `Settings` from the process environment.
+
+    Cached for the life of the process; env changes after first call don't
+    take effect until restart. Raises `RuntimeError` if any `required=True`
+    variable is missing.
+    """
     proxmox = ProxmoxConfig(
         host=_env("PROXMOX_HOST", required=True),
         user=_env("PROXMOX_USER", "root@pam"),

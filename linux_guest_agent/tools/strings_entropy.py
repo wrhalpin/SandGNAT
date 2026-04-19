@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Embedded-string extraction + per-section entropy.
 
 Stdlib only. We don't need GNU `strings(1)` for ASCII/UTF-16 enumeration —
@@ -19,6 +21,13 @@ _REG_RE = re.compile(rb"(?:HKLM|HKCU|HKEY_[A-Z_]+)\\[\w\\\.\- ]{3,200}")
 
 
 def extract_strings_and_entropy(data: bytes, *, max_strings_bytes: int) -> dict[str, Any]:
+    """Return counts + sampled ASCII/UTF-16 strings + URL/IP/registry-key
+    heuristics + overall Shannon entropy.
+
+    `max_strings_bytes` caps the retained `*_sample` lists so a
+    string-heavy installer doesn't blow up the envelope. URL/IP/registry
+    lists are capped at 1024 unique entries each.
+    """
     ascii_strings = [m.group(0).decode("ascii", errors="replace") for m in _ASCII_RUN.finditer(data)]
     utf16_strings = [
         m.group(0).decode("utf-16-le", errors="replace") for m in _UTF16_RUN.finditer(data)

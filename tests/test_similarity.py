@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the LSH-banded similarity engine."""
 
 from __future__ import annotations
@@ -117,12 +119,9 @@ def test_cache_top_edges_writes_canonical_ordering() -> None:
     """In production callers always pass exclude_self=True, so cache_top_edges
     never sees a self-edge — its canonical-ordering invariant is safe."""
     store, samples = _store_with_samples()
-    # Build a fresh similar-but-distinct sample so we get a non-self hit.
-    parent_aid, parent_sha, _, parent_data = samples[0]
-    sibling_aid = parent_aid  # noqa — bound for clarity
-    fresh_aid = parent_aid  # placeholder
-    # Take any sample[1..N] hits against sample[0]'s signature; those hits
-    # carry different analysis_ids, which is what cache_top_edges requires.
+    # Query with sample[0]'s signature. find_similar(exclude_self=True) filters
+    # it out, so every hit carries a different analysis_id — which is what
+    # cache_top_edges needs for its left < right invariant.
     aid, sha, sig, _ = samples[0]
     hits = find_similar(
         analysis_id=aid,

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """HTTP service: intake write path + read-only export routes.
 
     POST /submit                          accept a multipart upload, run

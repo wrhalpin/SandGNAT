@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Compute byte + opcode trigram MinHash signatures.
 
 Byte trigrams over executable sections only (when section info is

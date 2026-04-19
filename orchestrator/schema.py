@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Shared wire schema between the orchestrator and the Windows guest agent.
 
 Both sides import this module. It must stay stdlib-only so the guest agent can
@@ -57,6 +59,8 @@ TRIGRAMS_OPCODE_BIN = "trigrams_opcode.bin"
 
 @dataclass(slots=True)
 class CaptureConfig:
+    """Per-job capture knobs for the Windows detonation guest."""
+
     procmon: bool = True
     tshark: bool = True
     regshot: bool = True
@@ -97,6 +101,8 @@ class StaticAnalysisOptions:
 
 @dataclass(slots=True)
 class JobManifest:
+    """Host -> guest. Serialised to `pending/{job_id}.json` atomically."""
+
     schema_version: int
     job_id: str
     sample_sha256: str
@@ -109,11 +115,15 @@ class JobManifest:
     static: StaticAnalysisOptions = field(default_factory=StaticAnalysisOptions)
 
     def to_json(self) -> str:
+        """Deterministic JSON serialisation. Sort-keyed so two identical
+        manifests compare byte-equal."""
         payload = asdict(self)
         return json.dumps(payload, indent=2, sort_keys=True)
 
     @classmethod
     def from_json(cls, raw: str) -> "JobManifest":
+        """Parse + validate against `SCHEMA_VERSION`. Raises `ValueError`
+        on a version mismatch — guests must be re-frozen after a bump."""
         data = json.loads(raw)
         if data.get("schema_version") != SCHEMA_VERSION:
             raise ValueError(
@@ -147,6 +157,10 @@ class DroppedFileRecord:
 
 @dataclass(slots=True)
 class CaptureOutcome:
+    """Per-tool outcome from a Windows detonation (one row per ProcMon /
+    tshark / RegShot invocation). `error` is populated on non-fatal
+    failures so the envelope still reports what the guest managed to do."""
+
     tool: str
     started: bool
     stopped_cleanly: bool
@@ -156,6 +170,9 @@ class CaptureOutcome:
 
 @dataclass(slots=True)
 class ResultEnvelope:
+    """Guest -> host. Written to `completed/{job_id}/result.json` LAST — the
+    host uses this file's existence as the 'artifacts are ready' signal."""
+
     schema_version: int
     job_id: str
     status: str  # 'completed' | 'failed' | 'timeout'
@@ -178,10 +195,13 @@ class ResultEnvelope:
     static_summary: dict[str, Any] | None = None
 
     def to_json(self) -> str:
+        """Sort-keyed JSON so equivalent envelopes compare byte-equal."""
         return json.dumps(asdict(self), indent=2, sort_keys=True)
 
     @classmethod
     def from_json(cls, raw: str) -> "ResultEnvelope":
+        """Parse + validate schema version. Mode is preserved verbatim so the
+        host can dispatch to the right analyzer."""
         data = json.loads(raw)
         if data.get("schema_version") != SCHEMA_VERSION:
             raise ValueError(

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """RegShot wrapper.
 
 RegShot's command-line interface varies across builds, so we use the

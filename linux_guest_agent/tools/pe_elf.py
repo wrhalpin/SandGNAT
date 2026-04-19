@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """PE / ELF header parsing.
 
 PE handled by `pefile`, ELF by `pyelftools`. Both are optional — if neither
@@ -35,6 +37,7 @@ _ELF_MAGIC = b"\x7fELF"
 
 
 def detect_format(data: bytes) -> str | None:
+    """Sniff the first bytes: 'pe', 'elf', or None for anything else."""
     if data.startswith(_PE_MAGIC):
         return "pe"
     if data.startswith(_ELF_MAGIC):
@@ -43,6 +46,12 @@ def detect_format(data: bytes) -> str | None:
 
 
 def analyze_pe_elf(sample_path: Path, data: bytes) -> dict[str, Any]:
+    """Dispatch to the PE or ELF parser, or return a skipped marker.
+
+    Always returns a dict; never raises. A skipped result carries
+    `available` / `skipped` / `reason` so the orchestrator can distinguish
+    'not configured' from 'parse failed' downstream.
+    """
     fmt = detect_format(data)
     if fmt == "pe":
         return _analyze_pe(sample_path, data)

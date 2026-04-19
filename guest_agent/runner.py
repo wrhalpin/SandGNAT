@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Per-job detonation pipeline.
 
 Given a JobManifest and a working directory on the guest, run:
