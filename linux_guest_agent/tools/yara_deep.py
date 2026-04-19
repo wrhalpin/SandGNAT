@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Deep YARA scan against the static-analysis ruleset.
 
 Different rule directory from the intake-time quick scan: typically slower,
@@ -24,6 +26,12 @@ log = logging.getLogger(__name__)
 
 
 def scan_deep_yara(data: bytes, rules_dir: str) -> dict[str, Any]:
+    """Scan `data` against every `.yar`/`.yara` in `rules_dir`.
+
+    Returns a dict with `matches: list[{rule, tags, meta}]` on success, or
+    a `{available, skipped, reason}` marker when the library or rules are
+    missing. Never raises.
+    """
     if not _YARA_AVAILABLE:
         return {"available": False, "skipped": True, "reason": "yara-python not installed"}
     if not rules_dir:

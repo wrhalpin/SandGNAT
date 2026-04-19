@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Dropped-file detection.
 
 We take a pre-execution inventory of each watched directory (path -> mtime,

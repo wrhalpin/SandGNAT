@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Parse the Linux static-analysis guest's envelope into a normalised bundle.
 
 The guest writes `static_analysis.json` (per-tool sections, see

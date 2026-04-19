@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Guest-side capture-tool wrappers.
 
 Each module wraps exactly one external tool. Wrappers are designed so their

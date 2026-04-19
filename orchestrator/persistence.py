@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """The only module that writes to Postgres.
 
 Keeping SQL localised here means parsers and the STIX builder stay pure and

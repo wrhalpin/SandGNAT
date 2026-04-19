@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Host-side driver for the guest agent.
 
 This module is the mirror image of `guest_agent.watcher`. It writes a job
@@ -53,7 +55,7 @@ class ArtifactLocations:
 
 
 class GuestDriverError(RuntimeError):
-    pass
+    """Raised when the guest fails to publish a result within the watchdog."""
 
 
 def _pending_path(staging_root: Path, job_id: UUID) -> Path:

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 # Disable Windows Update so the clean snapshot stays deterministic.
 # Automatic updates change hundreds of registry keys and drop files on every
 # boot — RegShot baselines would be useless.

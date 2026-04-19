@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 Bill Halpin
 -- SandGNAT migration 002: intake metadata + VM pool leases.
 --
 -- Forward-only. Never edit after apply; add a new numbered file.

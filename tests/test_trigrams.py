@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the byte/opcode trigram extractor + MinHash signature.
 
 We want three things to be true:

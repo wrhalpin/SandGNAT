@@ -151,3 +151,18 @@ Phases 1–5 complete:
 
 Next up: end-to-end orchestration testing against real Proxmox + Postgres,
 plus push-on-completion if bulk pulling doesn't cover GNAT's ingest needs.
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE)
+for the full text.
+
+Every source file carries an SPDX header:
+
+```
+SPDX-License-Identifier: Apache-2.0
+Copyright 2026 Bill Halpin
+```
+
+New files added to the repo should include this header at the top (as a
+`#` comment for Python/PowerShell/shell, `--` for SQL).

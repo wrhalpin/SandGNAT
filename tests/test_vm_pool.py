@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the VM pool manager.
 
 Uses the in-memory `InMemoryPoolStore` to exercise the allocation, release,

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 # Lay out the capture directory and mount the staging share.
 #
 # Run once during template baking, AFTER FLARE-VM installation. Produces:

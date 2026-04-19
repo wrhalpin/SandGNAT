@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """tshark wrapper.
 
 We start tshark as a subprocess, capturing to a .pcap. Stop by sending the

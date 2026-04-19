@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the read-only export API.
 
 We build the Flask app through `intake_api.create_app` so both the intake

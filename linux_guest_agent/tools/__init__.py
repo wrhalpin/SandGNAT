@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tool wrappers for the Linux static-analysis guest.
 
 Each wrapper exposes a single function that takes the sample bytes (or path

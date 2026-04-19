@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the VirusTotal client.
 
 The client is stubbed with a fake `requests.Session` — no network access.

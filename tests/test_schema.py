@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Round-trip tests for the shared wire schema."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """End-to-end test of the analyzer against an on-disk fixture workspace.
 
 We fabricate a completed/ directory with a ProcMon CSV, a RegShot diff, and

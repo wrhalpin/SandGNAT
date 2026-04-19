@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Mandiant CAPA capability detection via subprocess.
 
 CAPA is a heavy native dep — we shell out to its CLI rather than embed it.
@@ -22,6 +24,12 @@ def run_capa(
     capa_exe: str,
     timeout_seconds: int,
 ) -> dict[str, Any]:
+    """Invoke `capa --json` against `sample_path` under a wallclock cap.
+
+    Returns `{capabilities: list[...]}` on success or a `{available,
+    skipped, reason}` marker if CAPA isn't installed / times out / fails
+    to produce JSON. Never raises.
+    """
     if not capa_exe:
         return {"available": False, "skipped": True, "reason": "no capa_exe configured"}
 

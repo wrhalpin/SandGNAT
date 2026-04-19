@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """ProcMon CSV parser.
 
 ProcMon can export filtered events to CSV (File → Save → CSV). The useful
@@ -44,6 +46,8 @@ BEHAVIOURAL_OPERATIONS = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class ProcmonEvent:
+    """One normalised ProcMon event: process + PID + operation + target path."""
+
     time: str
     process_name: str
     pid: int

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Entry point for the Celery worker.
 
 Run: `sandgnat-worker` (installed by pyproject) or

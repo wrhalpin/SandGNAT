@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Env-backed configuration for the Linux static-analysis guest.
 
 Stdlib only. Mirrors the layout of `guest_agent/config.py`.
@@ -26,6 +28,8 @@ def _env_float(name: str, default: float) -> float:
 
 @dataclass(frozen=True)
 class LinuxGuestConfig:
+    """Env-loaded configuration for the Linux static-analysis guest."""
+
     staging_root: Path
     poll_interval: float
     capa_exe: str
@@ -36,6 +40,7 @@ class LinuxGuestConfig:
 
 
 def from_env() -> LinuxGuestConfig:
+    """Construct a `LinuxGuestConfig` from the process environment."""
     return LinuxGuestConfig(
         staging_root=Path(_env("LINUX_GUEST_STAGING_ROOT", "/srv/sandgnat/staging")),
         poll_interval=_env_float("LINUX_GUEST_POLL_INTERVAL", 2.0),

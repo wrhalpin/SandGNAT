@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """ssdeep + TLSH fuzzy hashes."""
 
 from __future__ import annotations
@@ -22,6 +24,9 @@ except ImportError:  # pragma: no cover — optional dep
 
 
 def compute_fuzzy_hashes(data: bytes) -> dict[str, Any]:
+    """Return `{ssdeep, tlsh}` for `data`. Either value is `None` if the
+    corresponding library isn't installed or the hash couldn't be computed
+    (TLSH rejects inputs below ~50 bytes and with low entropy)."""
     out: dict[str, Any] = {"available": _SSDEEP_AVAILABLE or _TLSH_AVAILABLE}
     if _SSDEEP_AVAILABLE:
         try:

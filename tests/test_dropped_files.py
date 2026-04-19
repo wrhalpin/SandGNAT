@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the dropped-files inventory + collection logic.
 
 These run on any OS — we're just doing filesystem before/after diffs.

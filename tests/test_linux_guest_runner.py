@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """End-to-end test for the Linux guest's static-analysis runner.
 
 We feed in a fabricated 'sample' (just bytes on disk; static analysis

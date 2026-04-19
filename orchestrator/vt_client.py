@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """VirusTotal v3 hash-lookup client.
 
 We only ever ask VT "have you seen this hash?" — never upload bytes. Uploading
@@ -46,6 +48,10 @@ class VTVerdict:
 
 
 class VTClient:
+    """Hash-only VirusTotal v3 client. Never uploads bytes — only queries
+    `/files/<sha256>` and classifies the `last_analysis_stats` into a
+    coarse verdict that the intake pipeline uses for prioritisation."""
+
     def __init__(
         self,
         api_key: str,
@@ -54,6 +60,8 @@ class VTClient:
         timeout_seconds: float = 10.0,
         session: requests.Session | None = None,
     ) -> None:
+        """Empty `api_key` disables the client entirely; `lookup_hash`
+        becomes a no-op returning `verdict='unknown'`."""
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds

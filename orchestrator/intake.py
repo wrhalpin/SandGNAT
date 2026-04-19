@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Sample intake pipeline.
 
 Turns a raw byte buffer into either an enqueued `analysis_jobs` row or an
@@ -47,6 +49,8 @@ MAX_SAMPLE_NAME_LEN = 255
 
 @dataclass(frozen=True, slots=True)
 class SampleHashes:
+    """Hash triple + size for one submission. Canonical identity is SHA-256."""
+
     sha256: str
     md5: str
     sha1: str
@@ -95,6 +99,11 @@ Enqueuer = Callable[[UUID, str, str, int, int], None]
 
 
 def hash_sample(data: bytes) -> SampleHashes:
+    """Compute SHA-256 + MD5 + SHA-1 + size of a sample buffer.
+
+    MD5 and SHA-1 are kept for IOC-sharing compatibility with older tooling;
+    SHA-256 is the canonical identity used for dedupe and STIX IDs.
+    """
     return SampleHashes(
         sha256=hashlib.sha256(data).hexdigest(),
         md5=hashlib.md5(data).hexdigest(),  # noqa: S324 — MD5 is for IOC compatibility, not security
@@ -104,6 +113,8 @@ def hash_sample(data: bytes) -> SampleHashes:
 
 
 def sniff_mime(sample_name: str | None) -> str | None:
+    """Best-effort MIME guess from the filename extension. Advisory only;
+    never rejects a submission on type."""
     if not sample_name:
         return None
     mime, _ = mimetypes.guess_type(sample_name)

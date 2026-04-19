@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Sample execution.
 
 Runs the sample with a hard timeout. Returns (pid, exit_code, timed_out,
@@ -15,6 +17,9 @@ from pathlib import Path
 
 @dataclass(slots=True)
 class ExecutionResult:
+    """Outcome of one sample execution: pid, exit code, timeout flag,
+    wallclock duration, plus an optional error for spawn failures."""
+
     pid: int | None
     exit_code: int | None
     timed_out: bool
@@ -29,6 +34,12 @@ def execute_sample(
     timeout_seconds: int,
     working_dir: Path | None = None,
 ) -> ExecutionResult:
+    """Run the sample with a hard timeout. Never raises.
+
+    Spawn failure, timeout, and non-zero exit all resolve to a populated
+    `ExecutionResult` — the analyzer treats crashes as behavioural data, not
+    errors.
+    """
     if not sample_path.exists():
         return ExecutionResult(
             pid=None,

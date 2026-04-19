@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """DB-backed VM pool manager.
 
 Replaces the placeholder `9100 + (job.int % 900)` vmid derivation from the
@@ -73,6 +75,13 @@ class PoolStore(Protocol):
 
 
 class VmPool:
+    """Instance bound to one vmid range + one `guest_type`.
+
+    Production has two instances side-by-side: the Windows pool at
+    9100–9199 and the Linux static pool at 9200–9299, both sharing the
+    same `vm_pool_leases` table.
+    """
+
     def __init__(
         self,
         store: PoolStore,
@@ -126,6 +135,8 @@ class VmPool:
         )
 
     def heartbeat(self, vmid: int, analysis_id: UUID) -> None:
+        """Bump `vmid`'s heartbeat. Long-running tasks should call this
+        periodically so the stale-lease reaper doesn't steal their slot."""
         if not self._store.heartbeat_lease(vmid, analysis_id):
             log.warning(
                 "Heartbeat for vmid=%d analysis=%s did not match any active lease",
@@ -134,19 +145,28 @@ class VmPool:
             )
 
     def release(self, vmid: int, analysis_id: UUID) -> None:
+        """Return `vmid` to the pool. Call in a `finally` block after the
+        VM is reverted so a task crash doesn't permanently burn a slot."""
         self._store.release_lease(vmid, analysis_id)
         log.info("Released vmid=%d for analysis %s", vmid, analysis_id)
 
     def mark_orphaned(self, vmid: int) -> None:
+        """Flag a lease as irrecoverable (the VM's in an unknown state and
+        should be manually investigated before reuse)."""
         self._store.mark_orphaned(vmid)
 
     def active_count(self) -> int:
+        """Count of currently-leased vmids across every pool sharing the store."""
         return sum(1 for lease in self._store.active_leases() if lease.status == "leased")
 
     def snapshot(self) -> list[VmLease]:
+        """All live leases across every pool sharing the store. Read-only view."""
         return self._store.active_leases()
 
     def reap_stale(self) -> list[int]:
+        """Mark leases whose heartbeat is older than `stale_lease_seconds` as
+        orphaned. Returns the reclaimed vmids. Called automatically at the
+        start of every `acquire()`."""
         return self._store.reap_stale(self._stale_after)
 
 

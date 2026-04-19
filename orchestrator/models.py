@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Dataclasses mirroring the core Postgres tables.
 
 These are transport objects between the orchestrator layers. They are
@@ -14,6 +16,9 @@ from uuid import UUID
 
 
 class JobStatus(StrEnum):
+    """Lifecycle state of an `analysis_jobs` row. Transitions documented in
+    `docs/reference/database-schema.md` (state-machine diagram)."""
+
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -23,6 +28,10 @@ class JobStatus(StrEnum):
 
 @dataclass(slots=True)
 class AnalysisJob:
+    """One row of `analysis_jobs` in Python form. Written by intake, read by
+    every other layer. Phase-4 static-fingerprint fields at the bottom are
+    populated by `tasks_static.static_analyze_sample`."""
+
     id: UUID
     sample_hash_sha256: str
     status: JobStatus
@@ -64,6 +73,9 @@ class AnalysisJob:
 
 @dataclass(slots=True)
 class VmLease:
+    """One row of `vm_pool_leases`. The pool manager owns reads and writes;
+    never construct one outside `persistence` or an in-memory test fake."""
+
     vmid: int
     node: str
     analysis_id: UUID | None
@@ -96,6 +108,9 @@ class StaticAnalysisRow:
 
 @dataclass(slots=True)
 class LineageEdge:
+    """Parent/child relation between analyses. Emitted when the static-analysis
+    short-circuit marks a submission as a near-duplicate of an earlier job."""
+
     child_analysis_id: UUID
     parent_analysis_id: UUID
     relation: str  # 'near_duplicate' | 'reanalysis' | 'manual_link'
@@ -124,6 +139,9 @@ class SimilarityNeighbor:
 
 @dataclass(slots=True)
 class DroppedFile:
+    """One file dropped during detonation. Moved into quarantine after the
+    analyzer emits its STIX observable."""
+
     analysis_id: UUID
     filename: str
     original_path: str
@@ -138,6 +156,9 @@ class DroppedFile:
 
 @dataclass(slots=True)
 class RegistryModification:
+    """One registry change observed by RegShot. `persistence_indicator` is
+    True for classic Run-key / Winlogon / Services persistence locations."""
+
     analysis_id: UUID
     action: str  # 'added' | 'modified' | 'deleted'
     hive: str
@@ -150,6 +171,9 @@ class RegistryModification:
 
 @dataclass(slots=True)
 class NetworkIOC:
+    """One network indicator extracted from the PCAP: a resolved domain, a
+    contacted IP, a DNS query, or an HTTP URL."""
+
     analysis_id: UUID
     type: str  # 'ipv4' | 'ipv6' | 'domain' | 'url' | 'dns_query'
     indicator: str
@@ -163,6 +187,9 @@ class NetworkIOC:
 
 @dataclass(slots=True)
 class AuditEvent:
+    """One entry in the append-only `analysis_audit_log`. Emitted at every
+    meaningful lifecycle transition so operators can reconstruct a job."""
+
     analysis_id: UUID
     event_type: str
     details: dict[str, Any] = field(default_factory=dict)

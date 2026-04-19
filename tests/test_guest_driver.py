@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
 """Tests for the host-side guest_driver.
 
 These exercise the filesystem protocol (pending/, completed/, result.json)
