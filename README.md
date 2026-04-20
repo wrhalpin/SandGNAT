@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo/readme-banner.png" alt="SandGNAT" width="800">
+</p>
+
 # SandGNAT
 
 Automated malware runtime-analysis environment: detonate suspicious binaries in
@@ -6,7 +10,8 @@ network traffic, process trees), and emit STIX 2.1 objects into PostgreSQL.
 
 **Full documentation:** [`docs/`](docs/) — organised by the
 [Diátaxis](https://diataxis.fr/) framework (tutorials, how-to guides,
-reference, explanation).
+reference, explanation). Rendered at
+[wrhalpin.github.io/SandGNAT](https://wrhalpin.github.io/SandGNAT/).
 
 **Canonical design:** [`docs/MALWARE_ANALYSIS_SYSTEM_DESIGN.md`](docs/MALWARE_ANALYSIS_SYSTEM_DESIGN.md)
 
@@ -21,7 +26,8 @@ reference, explanation).
 
 ```
 .
-├── docs/                         Design docs
+├── assets/logo/                  Brand assets (favicon, social card, etc.)
+├── docs/                         Design docs + Diátaxis documentation site
 ├── migrations/                   Postgres schema (versioned SQL)
 ├── orchestrator/                 Python job orchestrator (Celery)
 │   ├── config.py                 Environment-backed settings

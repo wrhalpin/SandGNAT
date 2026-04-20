@@ -1,0 +1,32 @@
+title: SandGNAT
+description: >-
+  Automated malware runtime-analysis sandbox — Proxmox detonation, STIX 2.1
+  output, trigram-similarity clustering. Documentation organised with the
+  Diátaxis framework.
+
+# Pretty docs theme that ships with GitHub Pages. Alternatives: "minima",
+# "just-the-docs" (needs the gem), "pages-themes/cayman".
+theme: jekyll-theme-cayman
+
+# Repo link at the top of every page.
+show_downloads: false
+github:
+  repository_url: https://github.com/wrhalpin/SandGNAT
+
+# Markdown -> HTML uses kramdown + GitHub-flavoured rouge for code blocks.
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+# Make Jekyll serve these paths verbatim (no _site/ indirection for them).
+include:
+  - assets
+
+# Exclude files that shouldn't end up on the public site.
+exclude:
+  - README.md         # index.md is the canonical landing page for Pages
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
