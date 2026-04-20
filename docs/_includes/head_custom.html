@@ -1,4 +1,9 @@
-<!-- Injected into <head> by cayman theme. Favicon + social meta tags. -->
+<!-- Injected into <head> by the cayman theme. Favicon + social meta tags.
+     Browsers pick the best match in this order: PNG at exact requested
+     size, then ICO as a legacy fallback. -->
+<link rel="icon" type="image/png" sizes="32x32" href="{{ '/assets/logo/favicon-32.png' | relative_url }}">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ '/assets/logo/favicon-16.png' | relative_url }}">
+<link rel="icon" type="image/png" sizes="48x48" href="{{ '/assets/logo/favicon-48.png' | relative_url }}">
 <link rel="icon" type="image/x-icon" href="{{ '/assets/logo/favicon.ico' | relative_url }}">
 <link rel="apple-touch-icon" sizes="180x180" href="{{ '/assets/logo/apple-touch-icon.png' | relative_url }}">
 
