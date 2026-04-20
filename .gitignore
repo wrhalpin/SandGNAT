@@ -19,3 +19,8 @@ captures/
 *.pcap
 *.pml
 *.dmp
+
+# Jekyll build output (GitHub Pages builds in CI)
+_site/
+.jekyll-cache/
+Gemfile.lock

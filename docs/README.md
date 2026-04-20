@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="../assets/logo/sandgnat-logo-256.png" alt="SandGNAT" width="128">
+</p>
+
 # SandGNAT documentation
+
+**Rendered site:** [wrhalpin.github.io/SandGNAT](https://wrhalpin.github.io/SandGNAT/)
 
 Organised with the [Diátaxis](https://diataxis.fr/) framework: every
 document sits in exactly one of four quadrants based on whether it's
