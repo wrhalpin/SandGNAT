@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
+#
+# Mirrors wrhalpin/GNAT's dependency-review.yml. pip-audit scans the
+# declared dependencies in pyproject.toml for known CVEs at PR time
+# so a dependency bump that introduces a vulnerable version fails the
+# PR check visibly before merge.
+
+name: Dependency Review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Run pip-audit
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: "."

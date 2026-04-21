@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
+#
+# Mirrors wrhalpin/GNAT's python-tests.yml. The test suite uses
+# tests/conftest.py to stub the env vars required by `get_settings()`,
+# so no special setup is needed here.
+
+name: Python Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: python-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install package and test deps
+        run: |
+          pip install -e ".[dev]" || pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: pytest -q

@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
+#
+# Mirrors wrhalpin/GNAT's .github/workflows/codeql.yml, which actually
+# runs Semgrep (the GNAT filename is a historical carryover from an
+# earlier CodeQL attempt). Renamed here to reflect what it does.
+
+name: Semgrep
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "11 5 * * 3" # Wednesdays at 05:11 UTC
+
+jobs:
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/python
+            p/security-audit
+            p/secrets
