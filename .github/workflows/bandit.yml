@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
+#
+# Mirrors wrhalpin/GNAT's bandit.yml. Scans the three first-party
+# Python packages and excludes tests/ (test fixtures legitimately
+# contain assert-based patterns Bandit flags at low severity).
+
+name: Bandit
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  bandit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit
+        run: bandit -r orchestrator/ guest_agent/ linux_guest_agent/ -ll -x tests/

@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
+#
+# Mirrors wrhalpin/GNAT's pylint.yml. Matrix narrowed to 3.11/3.12
+# because SandGNAT requires Python 3.11+ per pyproject.toml; pylint
+# across older versions can't import the codebase.
+#
+# Env vars are stubbed to match `tests/conftest.py`: importing
+# `orchestrator.celery_app` at pylint analysis time triggers
+# `get_settings()`, which reads required env vars from the process.
+
+name: Pylint
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    env:
+      DATABASE_URL: postgresql://test/test
+      PROXMOX_HOST: test.invalid
+      PROXMOX_USER: test@pam
+      PROXMOX_TOKEN_NAME: test
+      PROXMOX_TOKEN_VALUE: test
+      PROXMOX_NODE: test
+      CELERY_BROKER_URL: memory://
+      CELERY_RESULT_BACKEND: cache+memory://
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pylint
+        pip install -e ".[dev]" || pip install -e .
+    - name: Analysing the code with pylint
+      run: |
+        pylint orchestrator guest_agent linux_guest_agent
