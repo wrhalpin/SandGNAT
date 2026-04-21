@@ -4,18 +4,21 @@ title: SandGNAT
 description: Automated malware runtime-analysis sandbox. STIX 2.1 native, trigram-clustered, Proxmox-isolated.
 ---
 
-<p align="center">
-  <img src="assets/logo/sandgnat-logo-256.png" alt="SandGNAT logo" width="192">
-</p>
-
-# SandGNAT
-
-Automated malware runtime-analysis environment: detonate suspicious binaries
-in isolated Windows VMs on Proxmox, cluster samples against the existing
-corpus via byte/opcode trigram MinHash, and emit STIX 2.1 objects into
-PostgreSQL.
-
-Source: [`github.com/wrhalpin/SandGNAT`](https://github.com/wrhalpin/SandGNAT).
+<div style="display: flex; align-items: center; gap: 2.5rem; margin-bottom: 2rem;">
+  <div style="flex: 1; min-width: 0;">
+    <h1 style="margin-top: 0;">SandGNAT</h1>
+    <p>Automated malware runtime-analysis environment: detonate suspicious
+    binaries in isolated Windows VMs on Proxmox, cluster samples against
+    the existing corpus via byte/opcode trigram MinHash, and emit STIX 2.1
+    objects into PostgreSQL.</p>
+    <p>Source: <a href="https://github.com/wrhalpin/SandGNAT"><code>github.com/wrhalpin/SandGNAT</code></a>.</p>
+  </div>
+  <div style="flex-shrink: 0;">
+    <img src="assets/logo/sandgnat-logo-512.png"
+         alt="SandGNAT mascot"
+         width="300">
+  </div>
+</div>
 
 ---
 
