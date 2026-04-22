@@ -71,6 +71,10 @@ making architectural changes.
 - `guest_agent/` — Windows-side collector. **Stdlib only** + `orchestrator.schema`.
   Runs inside the analysis VM, polls the staging share, drives ProcMon/tshark/RegShot,
   detonates the sample, packages artifacts. Deployed as a PyInstaller-frozen exe.
+- `guest_agent/activity/` — user-activity simulator (mouse jiggle, cursor
+  tour, keyboard noise, window dance). Spun up by `runner.py` around
+  `execute_sample`; import-safe on Linux because `winapi.py` stubs the
+  ctypes shims off-Windows. Config is env-var only (no schema bump).
 - `migrations/` — forward-only numbered SQL files. Never edit an applied
   migration; add a new one.
 - `infra/` — non-code configuration (firewall exports, guest prep scripts).

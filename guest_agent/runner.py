@@ -33,6 +33,7 @@ from orchestrator.schema import (
     ResultEnvelope,
 )
 
+from .activity import ActivitySimulator, load_activity_config
 from .capture import (
     ProcmonCapture,
     RegshotCapture,
@@ -93,7 +94,13 @@ def run_job(manifest: JobManifest, config: GuestConfig, workspace: Path) -> Resu
     watched_roots = [Path(p) for p in manifest.capture.dropped_file_roots]
     baseline_inventory = snapshot_roots(watched_roots)
 
-    # 4. Detonate -----------------------------------------------------------
+    # 4. Spin up the user-activity simulator (Phase D). The warmup
+    # window inside the simulator delays real input until a GUI-driven
+    # installer has moved past its first prompt.
+    simulator = ActivitySimulator(load_activity_config())
+    simulator.start()
+
+    # 5. Detonate -----------------------------------------------------------
     exec_result = execute_sample(
         sample_path=Path(manifest.sample_guest_path),
         arguments=manifest.arguments,
@@ -102,17 +109,25 @@ def run_job(manifest: JobManifest, config: GuestConfig, workspace: Path) -> Resu
     if exec_result.error:
         errors.append(f"execution: {exec_result.error}")
 
-    # 5. Stop dynamic captures ----------------------------------------------
+    # 6. Tear down the simulator before freezing captures — any stray
+    # input the loops generate after this point would pollute the
+    # ProcMon tail.
+    activity_summary = simulator.stop()
+    if activity_summary.errors:
+        for loop_name, loop_errors in activity_summary.errors.items():
+            errors.append(f"activity[{loop_name}]: {'; '.join(loop_errors)}")
+
+    # 7. Stop dynamic captures ----------------------------------------------
     if manifest.capture.tshark:
         captures.append(tshark.stop())
     if manifest.capture.procmon:
         captures.append(procmon.stop())
 
-    # 6. RegShot post + diff -------------------------------------------------
+    # 8. RegShot post + diff -------------------------------------------------
     if manifest.capture.regshot:
         captures.append(regshot.take_post_and_diff())
 
-    # 7. Collect dropped files ----------------------------------------------
+    # 9. Collect dropped files ----------------------------------------------
     dropped_records = collect_dropped_files(
         roots=watched_roots,
         baseline=baseline_inventory,
@@ -120,7 +135,7 @@ def run_job(manifest: JobManifest, config: GuestConfig, workspace: Path) -> Resu
         max_file_bytes=manifest.capture.max_dropped_file_bytes,
     )
 
-    # 8. Build envelope -----------------------------------------------------
+    # 10. Build envelope -----------------------------------------------------
     status = "completed"
     if exec_result.error:
         status = "failed"
