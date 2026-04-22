@@ -16,28 +16,34 @@ them against live samples.
    # Restart so UAC / service changes take effect.
    Restart-Computer
    ```
-4. After reboot, deploy the frozen guest agent (`sandgnat_guest_agent.exe`)
-   to `C:\Tools\SandGNAT\sandgnat_guest_agent.exe`, then:
-   ```powershell
-   .\configure-capture.ps1 `
-       -OrchestratorHost 192.168.100.1 `
-       -AgentExePath "C:\Tools\SandGNAT\sandgnat_guest_agent.exe"
-   ```
-5. Seed the decoy user profile so the template looks lived-in (Phase B
-   of the anti-analysis plan). Stage realistic `Documents/`,
-   `Downloads/`, and `Pictures/` content into `infra/guest/seed-data/`
-   beforehand — see that directory's README for guidance — then:
+4. After reboot, seed the decoy user profile (Phase B of the
+   anti-analysis plan). Stage realistic `Documents/`, `Downloads/`,
+   and `Pictures/` content into `infra/guest/seed-data/` beforehand —
+   see that directory's README for guidance — then:
    ```powershell
    .\seed-user-profile.ps1
    # Records generated credentials in C:\Users\<user>\profile.seed.json.
    ```
+   Note the generated username; the capture script needs it in the
+   next step.
+5. Deploy the frozen guest agent (`sandgnat_guest_agent.exe`) to
+   `C:\Tools\SandGNAT\sandgnat_guest_agent.exe`, then configure capture
+   (Phase C renames ProcMon to `C:\Windows\System32\SystemAudit.exe`
+   and registers the scheduled task as `Windows-PowerManagementAudit`):
+   ```powershell
+   .\configure-capture.ps1 `
+       -OrchestratorHost 192.168.100.1 `
+       -AgentExePath "C:\Tools\SandGNAT\sandgnat_guest_agent.exe" `
+       -UserName emily.carter
+   ```
 6. Reboot once more to confirm the scheduled task launches the agent
    and the seeded user autologs on. Verify by running
-   `schtasks /query /tn SandGNATGuestAgent /v` — the task should be
-   `Running`.
-7. Stop the agent, clear `C:\captures\*` and `C:\sandgnat\*`, and from
-   Proxmox take the `clean` snapshot. This is the snapshot every analysis
-   reverts to.
+   `schtasks /query /tn Windows-PowerManagementAudit /v` — the task
+   should be `Running`.
+7. Stop the agent, clear the workspace
+   (`C:\Users\<user>\AppData\Local\Microsoft\PowerManagement\`) and
+   its `captures\` subdirectory, and from Proxmox take the `clean`
+   snapshot. This is the snapshot every analysis reverts to.
 
 ## Template sizing baseline
 
