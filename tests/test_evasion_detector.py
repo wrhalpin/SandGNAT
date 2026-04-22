@@ -221,6 +221,45 @@ def test_suspicious_import_alone_stays_low():
     assert import_hit.severity == "low"
 
 
+# --- sleep-patch indicators (Phase E) ------------------------------------
+
+
+class _FakeSleepPatch:
+    def __init__(self, fn, requested, patched):
+        self.function = fn
+        self.requested_ms = requested
+        self.patched_ms = patched
+
+
+def test_sleep_patch_events_become_indicators():
+    patches = [
+        _FakeSleepPatch("Sleep", 60000, 2000),
+        _FakeSleepPatch("NtDelayExecution", 300000, 2000),
+    ]
+    result = detect_evasion(sleep_patches=patches)
+    assert len(result) == 2
+    assert all(i.category == "sleep_stall" for i in result)
+    assert all(i.severity == "high" for i in result)
+    assert all(i.source == "sleep_patcher" for i in result)
+    assert "60000ms -> 2000ms" in result[0].evidence
+
+
+def test_sleep_patch_events_deduplicate_identical():
+    patches = [
+        _FakeSleepPatch("Sleep", 60000, 2000),
+        _FakeSleepPatch("Sleep", 60000, 2000),
+    ]
+    assert len(detect_evasion(sleep_patches=patches)) == 1
+
+
+def test_sleep_patch_events_skip_malformed():
+    class _Bad:
+        function = "Sleep"
+        # missing requested_ms/patched_ms
+    result = detect_evasion(sleep_patches=[_Bad()])
+    assert result == []
+
+
 # --- summariser -----------------------------------------------------------
 
 

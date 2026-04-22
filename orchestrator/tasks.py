@@ -39,6 +39,7 @@ from .analyzer import AnalyzedBundle, analyze
 from .celery_app import app  # noqa: F401  — registers the Celery app on import
 from .config import get_settings
 from .evasion_detector import detect_evasion, summarise
+from guest_agent.stealth.log_parser import parse_log as parse_sleep_patch_log
 from .guest_driver import (
     GuestDriverError,
     cleanup_completed,
@@ -225,7 +226,12 @@ def analyze_malware_sample(
             else []
         )
         static_row = get_static_analysis(job_id)
-        indicators = detect_evasion(procmon_events, static_row)
+        sleep_patches = (
+            parse_sleep_patch_log(artifacts.sleep_patches_jsonl)
+            if artifacts.sleep_patches_jsonl is not None
+            else []
+        )
+        indicators = detect_evasion(procmon_events, static_row, sleep_patches)
         evasion_observed = bool(indicators)
         if indicators:
             log_event(

@@ -19,10 +19,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any  # noqa: F401 - re-exported typing used by sleep-patch shim
 
 from .models import StaticAnalysisRow
 from .parsers.procmon import ProcmonEvent
+
+
+# Forward-declared shape of the Phase-E log parser output so the
+# detector doesn't pull a guest-side import. Duck-typed check: anything
+# with .function + .requested_ms + .patched_ms works.
+class _SleepPatchLike:  # pragma: no cover - typing shim
+    function: str
+    requested_ms: int
+    patched_ms: int
 
 # --------------------------------------------------------------------------
 # Indicator catalogue
@@ -141,13 +150,19 @@ class EvasionIndicator:
 def detect_evasion(
     procmon_events: Iterable[ProcmonEvent] = (),
     static: StaticAnalysisRow | None = None,
+    sleep_patches: Iterable[Any] = (),
 ) -> list[EvasionIndicator]:
     """Run every detector over the provided inputs.
 
-    Either argument may be empty/None — the detector simply skips any
+    Any argument may be empty/None — the detector simply skips any
     check that has no data. The returned list is de-duplicated on
     `(category, evidence)` so repeated ProcMon reads of the same key
     only produce one indicator.
+
+    `sleep_patches` consumes the JSONL events emitted by Phase E's
+    sleep_patcher.dll. Each patched call (i.e. a requested Sleep /
+    Wait of >30s that we truncated) becomes one high-severity
+    `sleep_stall` indicator.
     """
     seen: set[tuple[str, str]] = set()
     out: list[EvasionIndicator] = []
@@ -162,6 +177,8 @@ def detect_evasion(
     for indicator in _runtime_indicators(procmon_events):
         _add(indicator)
     for indicator in _static_indicators(static):
+        _add(indicator)
+    for indicator in _sleep_patch_indicators(sleep_patches):
         _add(indicator)
 
     # Severity escalation: if a sample has a suspicious import AND
@@ -292,6 +309,29 @@ def _static_indicators(
                         source="static",
                     )
                     break
+
+
+# --------------------------------------------------------------------------
+# Sleep-patch indicators (Phase E)
+# --------------------------------------------------------------------------
+
+
+def _sleep_patch_indicators(
+    events: Iterable[Any],
+) -> Iterable[EvasionIndicator]:
+    for ev in events:
+        try:
+            fn = str(ev.function)
+            requested = int(ev.requested_ms)
+            patched = int(ev.patched_ms)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        yield EvasionIndicator(
+            category="sleep_stall",
+            severity="high",
+            evidence=f"{fn}: {requested}ms -> {patched}ms",
+            source="sleep_patcher",
+        )
 
 
 # --------------------------------------------------------------------------
