@@ -9,10 +9,15 @@ behaviourally interesting and the envelope just reports what happened.
 
 from __future__ import annotations
 
+import logging
+import os
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -33,12 +38,20 @@ def execute_sample(
     *,
     timeout_seconds: int,
     working_dir: Path | None = None,
+    env_overrides: dict[str, str] | None = None,
+    on_spawned: Callable[[int], None] | None = None,
 ) -> ExecutionResult:
     """Run the sample with a hard timeout. Never raises.
 
-    Spawn failure, timeout, and non-zero exit all resolve to a populated
-    `ExecutionResult` — the analyzer treats crashes as behavioural data, not
-    errors.
+    `env_overrides` is merged on top of the current process environment
+    for the spawned child only; the caller is responsible for building
+    it (typically a per-job `SANDGNAT_SLEEP_PATCH_LOG` path for the
+    Phase-E DLL).
+
+    `on_spawned` fires immediately after Popen returns, with the new
+    PID. Used by the stealth package to inject sleep_patcher.dll
+    before the sample has executed more than loader init. Any
+    exception from the callback is logged and swallowed.
     """
     if not sample_path.exists():
         return ExecutionResult(
@@ -49,6 +62,11 @@ def execute_sample(
             error=f"sample not found: {sample_path}",
         )
 
+    spawn_env = None
+    if env_overrides:
+        spawn_env = os.environ.copy()
+        spawn_env.update(env_overrides)
+
     start = time.monotonic()
     try:
         proc = subprocess.Popen(
@@ -56,6 +74,7 @@ def execute_sample(
             cwd=str(working_dir) if working_dir else str(sample_path.parent),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=spawn_env,
         )
     except OSError as exc:
         return ExecutionResult(
@@ -65,6 +84,13 @@ def execute_sample(
             duration_seconds=0.0,
             error=f"failed to spawn sample: {exc}",
         )
+
+    if on_spawned is not None:
+        try:
+            on_spawned(proc.pid)
+        except Exception:
+            # Never let a stealth callback fail the detonation.
+            log.exception("on_spawned callback failed for pid %s", proc.pid)
 
     try:
         exit_code = proc.wait(timeout=timeout_seconds)
