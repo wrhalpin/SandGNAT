@@ -60,6 +60,13 @@ making architectural changes.
 - `orchestrator/static_analysis.py` — pure parser turning the Linux
   guest's `static_analysis.json` + trigram blobs into a
   `StaticAnalysisBundle`. Mirrors `analyzer.py`'s role for detonation.
+- `orchestrator/evasion_detector.py` — pure post-run analyzer that
+  inspects ProcMon events + the StaticAnalysisRow for anti-VM /
+  anti-analysis behaviour (BIOS-registry probes, VM-artifact file
+  lookups, analysis-tool enumeration, suspicious imports, YARA
+  anti_vm hits). Task layer flips `analysis_jobs.evasion_observed`
+  and logs an `evasion_observed` audit event on any hit. YARA
+  companion rules live in `infra/yara/anti_vm.yar`.
 - `orchestrator/tasks_static.py` — Celery `static_analyze_sample` on queue
   `static`. Acquires a Linux pool slot, publishes a `mode=static_analysis`
   manifest, persists findings + signatures, runs LSH lookup, and either
