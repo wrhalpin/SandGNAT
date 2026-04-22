@@ -73,6 +73,10 @@ pipeline flow, sequence, and component diagrams rendered via Mermaid.
   obviously a repacked variant of something we already analysed. Details:
   [explanation/near-duplicate-short-circuit](explanation/near-duplicate-short-circuit.md).
 
+- **Anti-analysis evasion posture.** Catalogue of how modern malware
+  detects sandboxes plus the phased mitigation plan for SandGNAT:
+  [explanation/anti-analysis-evasion](explanation/anti-analysis-evasion.md).
+
 ## Status
 
 Phases 1–5 shipped: scaffold, host↔guest detonation protocol, intake,

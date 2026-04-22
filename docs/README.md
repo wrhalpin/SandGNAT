@@ -68,6 +68,7 @@ Discursive discussion of design decisions, theory, and tradeoffs.
 - [Trigram similarity and LSH](explanation/similarity.md)
 - [Near-duplicate short-circuit](explanation/near-duplicate-short-circuit.md)
 - [Isolation and threat model](explanation/isolation-model.md)
+- [Anti-analysis evasion](explanation/anti-analysis-evasion.md) — detection landscape + mitigation plan
 - [GNAT integration: pull, not push](explanation/gnat-integration.md)
 
 ## Additional documents
