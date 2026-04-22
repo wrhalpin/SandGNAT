@@ -47,11 +47,17 @@ class GuestConfig:
 
 def load_config() -> GuestConfig:
     """Build a `GuestConfig` from the process environment."""
+    # Default work_root and procmon paths reflect the Phase-C layout:
+    # workspace lives inside the decoy user's AppData so it blends with
+    # stock Windows telemetry, and Procmon runs under an innocuous
+    # System32 name (see infra/guest/configure-capture.ps1).
+    default_user = os.environ.get("SANDGNAT_DECOY_USER", os.environ.get("USERNAME", "Default"))
+    default_work = rf"C:\Users\{default_user}\AppData\Local\Microsoft\PowerManagement"
     return GuestConfig(
         staging_root=Path(_env("SANDGNAT_STAGING_ROOT", r"\\192.168.100.1\analysis")),
-        work_root=Path(_env("SANDGNAT_WORK_ROOT", r"C:\sandgnat")),
+        work_root=Path(_env("SANDGNAT_WORK_ROOT", default_work)),
         poll_interval=_env_float("SANDGNAT_POLL_INTERVAL", 2.0),
-        procmon_exe=Path(_env("SANDGNAT_PROCMON", r"C:\Tools\Procmon\Procmon.exe")),
+        procmon_exe=Path(_env("SANDGNAT_PROCMON", r"C:\Windows\System32\SystemAudit.exe")),
         tshark_exe=Path(_env("SANDGNAT_TSHARK", r"C:\Program Files\Wireshark\tshark.exe")),
         regshot_exe=Path(_env("SANDGNAT_REGSHOT", r"C:\Tools\Regshot\Regshot-x64-Unicode.exe")),
         capture_interface=_env("SANDGNAT_CAPTURE_INTERFACE", "Ethernet"),

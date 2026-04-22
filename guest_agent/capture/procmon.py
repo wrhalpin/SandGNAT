@@ -2,17 +2,24 @@
 # Copyright 2026 Bill Halpin
 """ProcMon wrapper.
 
-ProcMon is controlled via its CLI:
+ProcMon is controlled via its CLI. The binary is usually invoked under
+an innocuous name (`SystemAudit.exe` on a hardened template, per
+Phase C of the anti-analysis plan) so process-enumeration checks don't
+find "procmon.exe" in memory. The CLI surface is identical either way:
 
-    Procmon.exe /AcceptEula /Quiet /Minimized /BackingFile <pml>    # start
-    Procmon.exe /Terminate                                          # stop
-    Procmon.exe /OpenLog <pml> /SaveAs <csv> /SaveApplyFilter       # export
+    <procmon> /AcceptEula /Quiet /Minimized /BackingFile <pml>    # start
+    <procmon> /Terminate                                          # stop
+    <procmon> /OpenLog <pml> /SaveAs <csv> /SaveApplyFilter       # export
 
 The first two calls return quickly but the capture keeps running in the
 background until /Terminate. The third call blocks until the export is done.
 
-We intentionally do *not* pass any /BackingFile-Limit or /RunTime — detonation
-is short and we want the full timeline.
+/Quiet + /Minimized together suppress the EULA dialog and hide the GUI
+window — neither a window title nor a visible process should be
+enumerable during detonation.
+
+We intentionally do *not* pass any /BackingFile-Limit or /RunTime —
+detonation is short and we want the full timeline.
 """
 
 from __future__ import annotations
@@ -38,7 +45,7 @@ class ProcmonCapture:
                 tool="procmon",
                 started=False,
                 stopped_cleanly=False,
-                error=f"Procmon.exe not found at {self.procmon_exe}",
+                error=f"procmon binary not found at {self.procmon_exe}",
             )
         self.backing_file.parent.mkdir(parents=True, exist_ok=True)
         # /Quiet suppresses the EULA popup (already accepted by /AcceptEula).
