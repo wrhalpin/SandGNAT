@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bill Halpin
+#
+# Domains whose DNS is answered by real upstream resolution (the
+# OPNsense firewall forwards port-53 queries for these names to a
+# pinned public resolver). HTTP/HTTPS traffic to the resolved IPs is
+# still dropped — the goal is for nslookup/dig/Resolve-DnsName to
+# return plausible answers without letting any sample actually reach
+# the internet.
+#
+# One domain per line; bare domains only (no protocol, no path).
+# Comments begin with '#'. Subdomains are NOT auto-included — list
+# each explicitly so a * wildcard can't smuggle a C2 lookup.
+
+# Microsoft connectivity + update infrastructure (Windows boots fine).
+microsoft.com
+www.microsoft.com
+msftncsi.com
+www.msftncsi.com
+msftconnecttest.com
+www.msftconnecttest.com
+windowsupdate.microsoft.com
+update.microsoft.com
+download.microsoft.com
+ntp.microsoft.com
+time.windows.com
+settings-win.data.microsoft.com
+v10.events.data.microsoft.com
+
+# Common top-tier web properties (their presence in the corpus is
+# expected; absence is itself a signal some malware keys on).
+google.com
+www.google.com
+mail.google.com
+accounts.google.com
+youtube.com
+www.youtube.com
+facebook.com
+www.facebook.com
+twitter.com
+x.com
+linkedin.com
+www.linkedin.com
+amazon.com
+www.amazon.com
+apple.com
+www.apple.com
+icloud.com
+github.com
+stackoverflow.com
+reddit.com
+www.reddit.com
+
+# Certificate authorities (Windows reaches here for OCSP/CRL).
+ocsp.digicert.com
+crl.digicert.com
+ocsp.sectigo.com
+crl.sectigo.com
+ocsp.godaddy.com
+crl.godaddy.com
+
+# CDN endpoints referenced by half the web.
+cloudflare.com
+www.cloudflare.com
+akamai.com
+fastly.com
+
+# Browser telemetry (Firefox / Chrome phone-home checks).
+detectportal.firefox.com
+clients2.google.com
+clients3.google.com
+clients4.google.com
+
+# Upstream resolvers themselves — queried by `Resolve-DnsName` with an
+# explicit -Server flag during some "am I online" checks.
+1.1.1.1
+8.8.8.8
