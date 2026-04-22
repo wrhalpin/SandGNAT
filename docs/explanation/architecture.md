@@ -93,7 +93,8 @@ flowchart LR
     Parse --> STIX[Build STIX 2.1 bundle]
     STIX --> Persist[(Persist to Postgres)]
     Persist --> Quarantine[Move dropped files to quarantine]
-    Quarantine --> Done([status=completed])
+    Quarantine --> Evasion[Detect anti-VM behaviour<br/>evasion_detector.py]
+    Evasion --> Done([status=completed<br/>evasion_observed set])
 
     Done -.GET /analyses/id/bundle.-> GNATConsumer((GNAT connector))
 ```
@@ -243,6 +244,8 @@ becomes `completed` or `failed`.
 | Artifact parsers (pure)         | `parsers/*.py`, `static_analysis.py` |
 | STIX factories                  | `stix_builder.py`                   |
 | Similarity engine               | `similarity.py`, `trigrams.py`      |
+| Anti-analysis mitigations       | `guest_agent/activity/`, `guest_agent/stealth/` |
+| Evasion detection (post-run)    | `evasion_detector.py`               |
 | All SQL                         | `persistence.py`                    |
 
 This split matters: parsers and STIX factories are **pure** (no DB, no

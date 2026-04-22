@@ -43,6 +43,7 @@ accomplish.
 - [Add a new artifact parser](how-to/add-a-parser.md)
 - [Build the Windows detonation guest](how-to/build-windows-guest.md)
 - [Build the Linux static-analysis guest](how-to/build-linux-guest.md)
+- [Bake a template with anti-analysis mitigations](how-to/bake-template-for-evasion.md)
 - [Run the intake service under gunicorn](how-to/run-under-gunicorn.md)
 - [Tune the VM pools](how-to/tune-vm-pools.md)
 - [Query the export API from a script](how-to/query-export-api.md)

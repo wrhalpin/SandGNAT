@@ -82,9 +82,15 @@ making architectural changes.
   tour, keyboard noise, window dance). Spun up by `runner.py` around
   `execute_sample`; import-safe on Linux because `winapi.py` stubs the
   ctypes shims off-Windows. Config is env-var only (no schema bump).
+- `guest_agent/stealth/` — Phase-E sleep patcher. `sleep_patcher/`
+  holds the MSVC-built C++ DLL (MinHook-based hooks truncating
+  Sleep/Wait calls > 30s to 2s). `injector.py` does the ctypes
+  CreateRemoteThread + LoadLibraryW; `log_parser.py` consumes the
+  DLL's JSONL output. DLL is Windows-only; Python is import-safe.
 - `migrations/` — forward-only numbered SQL files. Never edit an applied
   migration; add a new one.
-- `infra/` — non-code configuration (firewall exports, guest prep scripts).
+- `infra/` — non-code configuration (firewall exports, guest prep scripts,
+  Proxmox hardening, INetSim overrides, YARA anti_vm rules).
 
 ## Conventions
 
