@@ -24,3 +24,8 @@ captures/
 _site/
 .jekyll-cache/
 Gemfile.lock
+
+# Phase B seed data for guest profile — operators stage local realistic
+# content into infra/guest/seed-data/ without committing it.
+infra/guest/seed-data/*
+!infra/guest/seed-data/README.md

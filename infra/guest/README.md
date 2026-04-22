@@ -23,12 +23,37 @@ them against live samples.
        -OrchestratorHost 192.168.100.1 `
        -AgentExePath "C:\Tools\SandGNAT\sandgnat_guest_agent.exe"
    ```
-5. Reboot once more to confirm the scheduled task launches the agent.
-   Verify by running `schtasks /query /tn SandGNATGuestAgent /v` — the task
-   should be `Running`.
-6. Stop the agent, clear `C:\captures\*` and `C:\sandgnat\*`, and from
+5. Seed the decoy user profile so the template looks lived-in (Phase B
+   of the anti-analysis plan). Stage realistic `Documents/`,
+   `Downloads/`, and `Pictures/` content into `infra/guest/seed-data/`
+   beforehand — see that directory's README for guidance — then:
+   ```powershell
+   .\seed-user-profile.ps1
+   # Records generated credentials in C:\Users\<user>\profile.seed.json.
+   ```
+6. Reboot once more to confirm the scheduled task launches the agent
+   and the seeded user autologs on. Verify by running
+   `schtasks /query /tn SandGNATGuestAgent /v` — the task should be
+   `Running`.
+7. Stop the agent, clear `C:\captures\*` and `C:\sandgnat\*`, and from
    Proxmox take the `clean` snapshot. This is the snapshot every analysis
    reverts to.
+
+## Template sizing baseline
+
+Malware increasingly keys off resource shape (under-4 vCPUs and
+under-6 GB RAM are the most-cited "too small for a real desktop"
+thresholds). Match these defaults when provisioning the template:
+
+| Resource   | Default             | Minimum |
+|------------|---------------------|---------|
+| vCPUs      | 4 cores × 2 threads | 4       |
+| RAM        | 8 GB                | 6 GB    |
+| Disk       | 120 GB              | 80 GB   |
+| Resolution | 1920×1080           | 1600×900 |
+
+Headroom matters more than raw count — a 2-core VM with 80 GB of empty
+disk still flags; a 4-core VM with a filled 80 GB disk doesn't.
 
 ## Freezing the guest agent
 
