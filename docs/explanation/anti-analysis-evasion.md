@@ -8,8 +8,10 @@ description: How modern malware detects sandboxes + VMs, and SandGNAT's plan to 
 
 # Anti-analysis evasion
 
-**Status:** research + plan. Implementation is tracked in the mitigation
-sections below; nothing in this doc is shipped yet.
+**Status:** Phases A–G shipped. Each mitigation section below ends with
+an "Implementation" note linking the code and commit. The detection
+landscape survey (Part 1) is unchanged reference material; the
+mitigation plan (Part 2) has become the mitigation record.
 
 A sample that correctly identifies SandGNAT as a sandbox will sleep, exit
 silently, or run a decoy payload. Our goal is the opposite: look enough
@@ -146,6 +148,9 @@ are the heavier lifts for evasive families.
 
 ### A. Proxmox-level hardening (1 week)
 
+**Shipped** (`b37d8a7`). Code: `infra/proxmox/harden-template.sh`,
+`infra/proxmox/README.md`.
+
 Target: defeat CPUID vendor string, SMBIOS strings, disk/NIC model
 fingerprints, MAC OUI checks.
 
@@ -185,6 +190,10 @@ flip from detected → clean.
 
 ### B. Guest-OS realism (1 week)
 
+**Shipped** (`0c83008`). Code: `infra/guest/seed-user-profile.ps1`,
+`infra/guest/seed-data/README.md`, updated `infra/guest/README.md`
+with sizing baseline and Phase-B template-bake step.
+
 Target: defeat environment-realism checks (§4 above).
 
 **New: `infra/guest/seed-user-profile.ps1`** — runs during template bake,
@@ -216,6 +225,14 @@ after `configure-capture.ps1`:
 
 ### C. Hide the capture toolchain (2 days)
 
+**Shipped** (`30a6a8f`). Code: updated
+`infra/guest/configure-capture.ps1`; matching defaults in
+`guest_agent/config.py` and `guest_agent/capture/procmon.py`. The
+ProcMon binary is invoked as `C:\Windows\System32\SystemAudit.exe`,
+the scheduled task is named `Windows-PowerManagementAudit`, and the
+workspace lives under
+`C:\Users\<decoy>\AppData\Local\Microsoft\PowerManagement\`.
+
 Target: defeat process/window/driver enumeration for analysis tools.
 
 **Changes to `infra/guest/configure-capture.ps1`:**
@@ -239,6 +256,14 @@ signature. We accept this for now; phase G flags samples that
 specifically enumerate it.
 
 ### D. Simulate an active user (1 week)
+
+**Shipped** (`44ce4d5`). Code: `guest_agent/activity/` package —
+`simulator.py` (lifecycle manager), `base.py` (threaded loop with
+warmup gate), `mouse_jiggle.py`, `cursor_tour.py`,
+`keyboard_noise.py`, `window_dance.py`, `winapi.py` (ctypes shim
+with Linux no-ops for CI). Wired into `guest_agent/runner.py`
+around `execute_sample`. Config via env vars
+(`SANDGNAT_ACTIVITY_*`); see `docs/reference/configuration.md`.
 
 Target: defeat §5 user-interaction checks.
 
@@ -264,6 +289,14 @@ launch so a GUI-driven installer isn't clicked through before the
 analyst's behavioural window opens. After that the simulator runs.
 
 ### E. Time-acceleration defence (2 weeks)
+
+**Shipped** (`511a8f0` DLL source; `49ad29a` Python wiring). Code:
+`guest_agent/stealth/sleep_patcher/` (C++ DLL with MinHook, built
+separately on Windows — see that directory's README),
+`guest_agent/stealth/injector.py` (CreateRemoteThread +
+LoadLibraryW via ctypes), `guest_agent/stealth/log_parser.py`. The
+Python injector is import-safe on Linux; the DLL is Windows-only
+and ships as a build artefact next to the frozen agent.
 
 Target: defeat sleep-based and RDTSC-based stalling.
 
@@ -291,6 +324,13 @@ phase. We document the limit.
 
 ### F. Network realism (1 week)
 
+**Shipped** (`c593567`). Code: `infra/inetsim/` (new directory) —
+`inetsim.conf` overrides, `dns-whitelist.txt` (~50 forwarded
+domains), `netem.sh` (25ms ±10ms jitter + 0.1% loss qdisc),
+`responses/` with the Microsoft NCSI / Apple captive-portal magic
+strings. `infra/opnsense/README.md` updated to document the
+split-DNS rule and shaping qdisc.
+
 Target: defeat §7 network-fingerprint checks.
 
 **Changes to `infra/opnsense/`:**
@@ -314,6 +354,16 @@ the right magic string; the "check for connectivity" popup never
 appears on boot.
 
 ### G. Detect + record evasion attempts (1 week)
+
+**Shipped** (`a2b2356` detector + rules; `49ad29a` sleep-patch
+indicator). Code: `orchestrator/evasion_detector.py` (pure analyzer
+over ProcMon events + StaticAnalysisRow + sleep_patcher.dll's
+JSONL), `infra/yara/anti_vm.yar` (six rules tagged `anti_vm`
+/ `anti_analysis` / `anti_debug`). Wired into
+`tasks.analyze_malware_sample` between quarantine and
+`update_job_status(COMPLETED)`; flips
+`analysis_jobs.evasion_observed` and logs an `evasion_observed`
+audit event on any hit.
 
 Target: observe and flag when a sample is *trying* to detect us, even
 if our mitigations worked.
@@ -410,4 +460,20 @@ subprocess lifecycle assumes E's hooks are installed first).
 Dependencies on sign-off from the isolation-model reviewer: F, and
 the DNS-whitelist change specifically. Everything else is
 engineer-discretion.
+
+## Implementation record
+
+| Phase | Commit(s)           | Shipped artefacts                                      |
+|-------|---------------------|--------------------------------------------------------|
+| A     | `b37d8a7`           | `infra/proxmox/harden-template.sh` + README            |
+| B     | `0c83008`           | `infra/guest/seed-user-profile.ps1` + seed-data/ + README updates |
+| C     | `30a6a8f`           | `configure-capture.ps1` rewrite + guest_agent/config defaults |
+| D     | `44ce4d5`           | `guest_agent/activity/` package + 15 tests             |
+| E     | `511a8f0`, `49ad29a` | `guest_agent/stealth/sleep_patcher/` (C++ DLL) + `stealth/injector.py` + `stealth/log_parser.py` + 10 tests |
+| F     | `c593567`           | `infra/inetsim/` (config + DNS whitelist + netem + responses) + OPNsense README |
+| G     | `a2b2356`           | `orchestrator/evasion_detector.py` + `infra/yara/anti_vm.yar` + tasks.py wiring + 21 tests |
+
+All seven phases landed on `claude/intake-service-vm-manager-Azqfw`
+with the suite at 187/187 passing. Operator-facing runbook:
+[how-to/bake-template-for-evasion](../how-to/bake-template-for-evasion.md).
 

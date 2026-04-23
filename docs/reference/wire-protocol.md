@@ -35,6 +35,7 @@ staging/
         ├── dropped_files.json      ← detonation only
         ├── dropped/
         │   └── {sha256}            ← detonation only
+        ├── sleep_patches.jsonl     ← detonation only (optional; Phase E)
         ├── static_analysis.json    ← static only
         ├── trigrams_byte.bin       ← static only
         └── trigrams_opcode.bin     ← static only (optional)
@@ -213,6 +214,33 @@ parses:
 Any top-level key may be missing if the corresponding tool was
 skipped/unavailable — the parser tolerates absence rather than
 requiring a sentinel.
+
+## Sleep-patch log (`sleep_patches.jsonl`)
+
+Phase E of the anti-analysis plan. Optional; absent when the sample
+made no `Sleep`/`SleepEx`/`NtDelayExecution`/`NtWaitForSingleObject`
+call with a timeout > 30 s, or when `sleep_patcher.dll` failed to
+inject. One JSON object per line:
+
+```json
+{"t":"2026-04-22T15:30:17.123Z","tid":4242,"fn":"Sleep",
+ "requested_ms":600000,"patched_ms":2000}
+```
+
+Fields:
+
+- `t` — ISO-8601 UTC timestamp with millisecond precision.
+- `tid` — Win32 thread id that made the call.
+- `fn` — one of `Sleep`, `SleepEx`, `NtDelayExecution`,
+  `NtWaitForSingleObject`.
+- `requested_ms` — the original timeout the sample asked for.
+- `patched_ms` — what we actually passed through (currently hard-coded
+  to 2000).
+
+Consumed host-side by `guest_agent.stealth.log_parser.parse_log`; each
+event becomes one `sleep_stall` indicator in the evasion detector
+(Phase G). Tolerant of malformed lines (torn writes survive a
+mid-detonation crash).
 
 ## Trigram blobs
 
