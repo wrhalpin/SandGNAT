@@ -60,6 +60,13 @@ making architectural changes.
 - `orchestrator/static_analysis.py` — pure parser turning the Linux
   guest's `static_analysis.json` + trigram blobs into a
   `StaticAnalysisBundle`. Mirrors `analyzer.py`'s role for detonation.
+- `orchestrator/evasion_detector.py` — pure post-run analyzer that
+  inspects ProcMon events + the StaticAnalysisRow for anti-VM /
+  anti-analysis behaviour (BIOS-registry probes, VM-artifact file
+  lookups, analysis-tool enumeration, suspicious imports, YARA
+  anti_vm hits). Task layer flips `analysis_jobs.evasion_observed`
+  and logs an `evasion_observed` audit event on any hit. YARA
+  companion rules live in `infra/yara/anti_vm.yar`.
 - `orchestrator/tasks_static.py` — Celery `static_analyze_sample` on queue
   `static`. Acquires a Linux pool slot, publishes a `mode=static_analysis`
   manifest, persists findings + signatures, runs LSH lookup, and either
@@ -71,9 +78,19 @@ making architectural changes.
 - `guest_agent/` — Windows-side collector. **Stdlib only** + `orchestrator.schema`.
   Runs inside the analysis VM, polls the staging share, drives ProcMon/tshark/RegShot,
   detonates the sample, packages artifacts. Deployed as a PyInstaller-frozen exe.
+- `guest_agent/activity/` — user-activity simulator (mouse jiggle, cursor
+  tour, keyboard noise, window dance). Spun up by `runner.py` around
+  `execute_sample`; import-safe on Linux because `winapi.py` stubs the
+  ctypes shims off-Windows. Config is env-var only (no schema bump).
+- `guest_agent/stealth/` — Phase-E sleep patcher. `sleep_patcher/`
+  holds the MSVC-built C++ DLL (MinHook-based hooks truncating
+  Sleep/Wait calls > 30s to 2s). `injector.py` does the ctypes
+  CreateRemoteThread + LoadLibraryW; `log_parser.py` consumes the
+  DLL's JSONL output. DLL is Windows-only; Python is import-safe.
 - `migrations/` — forward-only numbered SQL files. Never edit an applied
   migration; add a new one.
-- `infra/` — non-code configuration (firewall exports, guest prep scripts).
+- `infra/` — non-code configuration (firewall exports, guest prep scripts,
+  Proxmox hardening, INetSim overrides, YARA anti_vm rules).
 
 ## Conventions
 

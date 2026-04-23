@@ -38,6 +38,8 @@ from celery import shared_task
 from .analyzer import AnalyzedBundle, analyze
 from .celery_app import app  # noqa: F401  — registers the Celery app on import
 from .config import get_settings
+from .evasion_detector import detect_evasion, summarise
+from guest_agent.stealth.log_parser import parse_log as parse_sleep_patch_log
 from .guest_driver import (
     GuestDriverError,
     cleanup_completed,
@@ -45,9 +47,11 @@ from .guest_driver import (
     wait_for_result,
 )
 from .models import AuditEvent, JobStatus
+from .parsers.procmon import parse_procmon_csv
 from .persistence import (
     PostgresPoolStore,
     get_job,
+    get_static_analysis,
     insert_dropped_files,
     insert_network_iocs,
     insert_registry_modifications,
@@ -210,6 +214,34 @@ def analyze_malware_sample(
         moved = _ingest_quarantine(artifacts.workspace, quarantine_root, job_id, bundle)
         log_event(AuditEvent(job_id, "quarantined", {"file_count": moved}))
 
+        # Phase G: post-run evasion detection. Re-parse the ProcMon CSV
+        # (cheap — it's the same file the analyzer just consumed) and
+        # combine with the static-analysis row if one exists. Any hit
+        # flips evasion_observed=TRUE on the job and records the
+        # indicators in the audit log — signal about the sample's
+        # sophistication even when our mitigations were enough.
+        procmon_events = (
+            parse_procmon_csv(artifacts.procmon_csv)
+            if artifacts.procmon_csv is not None
+            else []
+        )
+        static_row = get_static_analysis(job_id)
+        sleep_patches = (
+            parse_sleep_patch_log(artifacts.sleep_patches_jsonl)
+            if artifacts.sleep_patches_jsonl is not None
+            else []
+        )
+        indicators = detect_evasion(procmon_events, static_row, sleep_patches)
+        evasion_observed = bool(indicators)
+        if indicators:
+            log_event(
+                AuditEvent(
+                    job_id,
+                    "evasion_observed",
+                    summarise(indicators),
+                )
+            )
+
         completed = datetime.now(timezone.utc)
         update_job_status(
             job_id,
@@ -223,6 +255,7 @@ def analyze_malware_sample(
                 "envelope_status": artifacts.envelope.status,
             },
             quarantine_path=str(quarantine_root / str(job_id)),
+            evasion_observed=evasion_observed,
         )
         cleanup_completed(staging_root, job_id)
         return {

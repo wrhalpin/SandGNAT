@@ -43,9 +43,31 @@ analyze_malware_sample(
 7. Run `analyzer.analyze()` over the result workspace.
 8. Persist STIX, dropped files, registry modifications, network IOCs.
 9. Move dropped files from staging to quarantine.
-10. Update `analysis_jobs.status = completed` with `result_summary`.
-11. Revert the VM to clean snapshot, release the pool lease (in
+10. Run `evasion_detector.detect_evasion` over the ProcMon events, the
+    static-analysis row (if present), and the Phase-E sleep-patch log
+    (`sleep_patches.jsonl`, if present). Any hit logs an
+    `evasion_observed` audit event and flips
+    `analysis_jobs.evasion_observed = TRUE` on the final status write.
+11. Update `analysis_jobs.status = completed` with `result_summary`
+    and `evasion_observed`.
+12. Revert the VM to clean snapshot, release the pool lease (in
     `finally`).
+
+### Audit events
+
+`analyze_malware_sample` writes to `analysis_audit_log` at each
+lifecycle boundary:
+
+| Event                   | When                                         | `details` shape                                    |
+|-------------------------|----------------------------------------------|----------------------------------------------------|
+| `detonation_started`    | Step 1                                       | `{sha256}`                                         |
+| `vm_spun_up`            | Step 4                                       | `{vmid}`                                           |
+| `job_submitted_to_guest`| Step 5                                       | `{}`                                               |
+| `artifacts_collected`   | After result.json lands                      | `{status, workspace}`                              |
+| `stix_persisted`        | Step 8                                       | `{stix_count, dropped, regmods, network_iocs}`     |
+| `quarantined`           | Step 9                                       | `{file_count}`                                     |
+| `evasion_observed`      | Step 10, only when indicators fire           | `{count, by_category, by_severity, indicators[]}`  |
+| `vm_reverted`           | `finally`                                    | `{vmid}`                                           |
 
 ### Return value
 

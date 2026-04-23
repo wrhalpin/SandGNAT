@@ -52,6 +52,11 @@ STATIC_ANALYSIS_JSON = "static_analysis.json"
 TRIGRAMS_BYTE_BIN = "trigrams_byte.bin"
 TRIGRAMS_OPCODE_BIN = "trigrams_opcode.bin"
 
+# Phase E: sleep_patcher.dll's per-sample JSONL log. Optional — absent
+# when the sample made no >30s Sleep/Wait calls, or when injection
+# failed entirely.
+SLEEP_PATCHES_JSONL = "sleep_patches.jsonl"
+
 
 # ---------------------------------------------------------------------------
 # Job manifest: host -> guest

@@ -31,6 +31,7 @@ from .schema import (
     REGSHOT_DIFF,
     RESULT_FILENAME,
     SCHEMA_VERSION,
+    SLEEP_PATCHES_JSONL,
     CaptureConfig,
     JobManifest,
     ResultEnvelope,
@@ -52,6 +53,7 @@ class ArtifactLocations:
     pcap: Path | None
     regshot_diff: Path | None
     dropped_dir: Path | None
+    sleep_patches_jsonl: Path | None = None
 
 
 class GuestDriverError(RuntimeError):
@@ -173,6 +175,7 @@ def wait_for_result(
         pcap=_existing(workspace / PCAP_FILE),
         regshot_diff=_existing(workspace / REGSHOT_DIFF),
         dropped_dir=_existing(workspace / DROPPED_DIR),
+        sleep_patches_jsonl=_existing(workspace / SLEEP_PATCHES_JSONL),
     )
 
 

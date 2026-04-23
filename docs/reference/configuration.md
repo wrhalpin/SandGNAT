@@ -86,6 +86,57 @@ Set these on the Linux static-analysis guest, not on the orchestrator.
 | `LINUX_GUEST_YARA_DEEP_RULES_DIR`     | `""`                          | Deep YARA rules on the guest    |
 | `LINUX_GUEST_MAX_STRINGS_BYTES`       | `1048576`                     | Cap on strings kept in envelope |
 
+## Windows guest agent (anti-analysis mitigations)
+
+Set these on the Windows detonation guest. All are opt-out — defaults
+match the hardened template produced by the Phase A–C template-bake
+runbook. Env vars take precedence over the defaults in
+`guest_agent/config.py`, so non-hardened dev VMs can disable
+individual mitigations without rebuilding the frozen agent.
+
+### Paths (Phase C)
+
+| Variable                    | Default                                                                 | Purpose                                                    |
+|-----------------------------|-------------------------------------------------------------------------|------------------------------------------------------------|
+| `SANDGNAT_DECOY_USER`       | `%USERNAME%`                                                            | Username whose AppData holds the workspace                 |
+| `SANDGNAT_WORK_ROOT`        | `C:\Users\<decoy>\AppData\Local\Microsoft\PowerManagement`              | Per-job workspace root on the guest                        |
+| `SANDGNAT_STAGING_ROOT`     | `\\192.168.100.1\analysis`                                              | UNC path to the orchestrator staging share (no drive letter) |
+| `SANDGNAT_PROCMON`          | `C:\Windows\System32\SystemAudit.exe`                                   | Renamed ProcMon binary                                     |
+
+### Activity simulator (Phase D)
+
+Set `SANDGNAT_ACTIVITY_ENABLED=0` to disable the entire simulator; the
+individual toggles only apply when the master switch is on.
+
+| Variable                            | Default | Purpose                                           |
+|-------------------------------------|---------|---------------------------------------------------|
+| `SANDGNAT_ACTIVITY_ENABLED`         | `1`     | Master on/off for the four simulator threads     |
+| `SANDGNAT_ACTIVITY_WARMUP`          | `30`    | Seconds to wait after sample launch before activity fires |
+| `SANDGNAT_ACTIVITY_MOUSE_JIGGLE`    | `1`     | Enable the mouse-jiggle loop                     |
+| `SANDGNAT_MOUSE_JIGGLE_MIN`         | `20`    | Min interval between jiggles (seconds)           |
+| `SANDGNAT_MOUSE_JIGGLE_MAX`         | `60`    | Max interval between jiggles (seconds)           |
+| `SANDGNAT_ACTIVITY_CURSOR_TOUR`     | `1`     | Enable the cursor-tour loop                      |
+| `SANDGNAT_CURSOR_TOUR_MIN`          | `180`   | Min interval between tours (seconds)             |
+| `SANDGNAT_CURSOR_TOUR_MAX`          | `420`   | Max interval between tours (seconds)             |
+| `SANDGNAT_ACTIVITY_KEYBOARD_NOISE`  | `1`     | Enable the hidden-Notepad typing loop            |
+| `SANDGNAT_KEYBOARD_NOISE_MIN`       | `240`   | Min interval (seconds)                           |
+| `SANDGNAT_KEYBOARD_NOISE_MAX`       | `600`   | Max interval (seconds)                           |
+| `SANDGNAT_ACTIVITY_WINDOW_DANCE`    | `1`     | Enable the open/close app loop                   |
+| `SANDGNAT_WINDOW_DANCE_MIN`         | `120`   | Min interval (seconds)                           |
+| `SANDGNAT_WINDOW_DANCE_MAX`         | `300`   | Max interval (seconds)                           |
+
+### Sleep patcher (Phase E)
+
+| Variable                       | Default                                  | Purpose                                                  |
+|--------------------------------|------------------------------------------|----------------------------------------------------------|
+| `SANDGNAT_SLEEP_PATCHER_DLL`   | `<agent_dir>/sleep_patcher.dll`          | Absolute path to sleep_patcher.dll; falls back to the agent directory |
+| `SANDGNAT_SLEEP_PATCH_LOG`     | `<workspace>/sleep_patches.jsonl`        | Set automatically by the runner per-job; DLL writes here |
+
+If the DLL is missing the runner continues without injection (Phase G
+still catches the import pattern). Off-Windows the injector refuses
+cleanly; tests can force the Windows code path with
+`SANDGNAT_FAKE_WIN32=1`.
+
 ## Security posture
 
 - `INTAKE_API_KEY` must be set before `intake_server` starts. The factory

@@ -142,7 +142,7 @@ Env knobs for intake:
 
 ## Status
 
-Phases 1–5 complete:
+Phases 1–6 complete:
 
 1. Scaffold, Postgres schema, STIX factories.
 2. Host↔guest detonation protocol + analyzer turning artifacts into STIX.
@@ -154,6 +154,14 @@ Phases 1–5 complete:
    (in the separate `wrhalpin/GNAT` repo) pulls completed analyses over
    HTTP — STIX bundles, per-job static findings, and similarity neighbours
    — without needing direct Postgres access.
+6. **Anti-analysis evasion mitigations (phases A–G).** Proxmox-level
+   template hardening, decoy-user profile seeding, renamed capture
+   toolchain, user-activity simulator, MinHook-based sleep patcher,
+   split-DNS INetSim + netem network realism, and a post-run
+   evasion detector that flips `analysis_jobs.evasion_observed` when a
+   sample tries to identify the sandbox. Rationale +
+   implementation record in
+   [`docs/explanation/anti-analysis-evasion.md`](docs/explanation/anti-analysis-evasion.md).
 
 Next up: end-to-end orchestration testing against real Proxmox + Postgres,
 plus push-on-completion if bulk pulling doesn't cover GNAT's ingest needs.
