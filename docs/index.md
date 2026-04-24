@@ -94,31 +94,76 @@ threat-intel platform. Every sibling emits STIX 2.1 objects and is
 pulled by GNAT through a documented connector rather than writing
 into its database directly.
 
-[Canonical workflow documentation →](https://wrhalpin.github.io/gnat-o-sphere/workflow.html)
+<div class="gnatophere-grid">
 
-<div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1.25rem; align-items: stretch;">
-
-  <div style="flex: 1 1 240px; background: #fafafa; border: 2px solid #C41E2A; border-radius: 14px; padding: 1.5rem 1.25rem; display: flex; flex-direction: column;">
-    <span style="font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: #606c71; margin-bottom: .5rem;">Core platform</span>
-    <h3 style="margin: 0 0 .5rem 0; color: #C41E2A; font-size: 1.25rem;">GNAT</h3>
-    <p style="flex: 1; margin: 0;">The hub TIP. Connector abstraction, STIX 2.1 modelling, investigations, reports, and workflow automation across a large integration surface.</p>
-    <a href="https://wrhalpin.github.io/GNAT/" style="display: inline-block; margin-top: .75rem; padding: .4rem 1rem; border-radius: 8px; font-size: .9rem; font-weight: 600; text-decoration: none; color: #fff; background: #C41E2A; align-self: flex-start;">Learn more</a>
+  <div class="gnat-card gnat-card-gnat">
+    <span class="gnat-card-tag">Core platform</span>
+    <h3>GNAT</h3>
+    <p>The hub TIP. Connector abstraction, STIX 2.1 modelling, investigations, reports, and workflow automation across a large integration surface.</p>
   </div>
 
-  <div style="flex: 1 1 240px; background: #fafafa; border: 2px solid #C0392B; border-radius: 14px; padding: 1.5rem 1.25rem; display: flex; flex-direction: column;">
-    <span style="font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: #606c71; margin-bottom: .5rem;">Addon</span>
-    <h3 style="margin: 0 0 .5rem 0; color: #C0392B; font-size: 1.25rem;">RedGNAT</h3>
-    <p style="flex: 1; margin: 0;">Continuous automated red teaming — ingests threat intel, constructs adversary emulation scenarios, executes them with safety controls.</p>
-    <a href="https://wrhalpin.github.io/RedGNAT/" style="display: inline-block; margin-top: .75rem; padding: .4rem 1rem; border-radius: 8px; font-size: .9rem; font-weight: 600; text-decoration: none; color: #fff; background: #C0392B; align-self: flex-start;">Learn more</a>
+  <div class="gnat-card gnat-card-red">
+    <span class="gnat-card-tag">Addon</span>
+    <h3>RedGNAT</h3>
+    <p>Continuous automated red teaming — ingests threat intel, constructs adversary emulation scenarios, executes them with safety controls.</p>
+    <a class="gnat-card-link gnat-link-red" href="https://wrhalpin.github.io/RedGNAT/">Learn more</a>
   </div>
 
-  <div style="flex: 1 1 240px; background: #fafafa; border: 2px solid #7C3AED; border-radius: 14px; padding: 1.5rem 1.25rem; display: flex; flex-direction: column;">
-    <span style="font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: #606c71; margin-bottom: .5rem;">Addon</span>
-    <h3 style="margin: 0 0 .5rem 0; color: #7C3AED; font-size: 1.25rem;">SenseGNAT</h3>
-    <p style="flex: 1; margin: 0;">Network sensor + honeypot telemetry. High-volume Kafka ingestion, Redis dedupe, automatic campaign linking back into GNAT.</p>
-    <a href="https://wrhalpin.github.io/SenseGNAT/" style="display: inline-block; margin-top: .75rem; padding: .4rem 1rem; border-radius: 8px; font-size: .9rem; font-weight: 600; text-decoration: none; color: #fff; background: #7C3AED; align-self: flex-start;">Learn more</a>
+  <div class="gnat-card gnat-card-sense">
+    <span class="gnat-card-tag">Addon</span>
+    <h3>SenseGNAT</h3>
+    <p>Network sensor + honeypot telemetry. High-volume Kafka ingestion, Redis dedupe, automatic campaign linking back into GNAT.</p>
+    <a class="gnat-card-link gnat-link-sense" href="https://wrhalpin.github.io/SenseGNAT/">Learn more</a>
   </div>
 
+</div>
+
+### Canonical Workflow
+
+<div class="flow-teaser">
+  <div class="flow-stage">
+    <div class="flow-node flow-node--neutral">
+      <span class="flow-step">Collect</span>
+      <strong>Telemetry &amp; Sources</strong>
+      <p>External indicators and raw network telemetry enter the ecosystem</p>
+    </div>
+  </div>
+  <div class="flow-arrow">&rarr;</div>
+  <div class="flow-stage">
+    <div class="flow-node flow-node--gnat">
+      <span class="flow-step">Process</span>
+      <strong>GNAT</strong>
+      <p>Ingest, normalize, convert to STIX, and route to addons</p>
+    </div>
+  </div>
+  <div class="flow-arrow">&rarr;</div>
+  <div class="flow-stage flow-stage--addons">
+    <div class="flow-node flow-node--sense">
+      <strong>SenseGNAT</strong>
+      <p>Behavioral profiling &amp; anomaly detection</p>
+    </div>
+    <div class="flow-node flow-node--sand">
+      <strong>SandGNAT</strong>
+      <p>Malware detonation &amp; artifact enrichment</p>
+    </div>
+    <div class="flow-node flow-node--red">
+      <strong>RedGNAT</strong>
+      <p>Adversary emulation &amp; validation</p>
+    </div>
+  </div>
+  <div class="flow-arrow">&rarr;</div>
+  <div class="flow-stage">
+    <div class="flow-node flow-node--neutral">
+      <span class="flow-step">Report</span>
+      <strong>Investigate &amp; Act</strong>
+      <p>Unified investigation graph, reporting, and operator action</p>
+    </div>
+  </div>
+</div>
+
+<div class="flow-actions">
+  <a href="https://wrhalpin.github.io/GNAT/diagram.html">View full diagram &rarr;</a>
+  <a href="https://wrhalpin.github.io/GNAT/workflow.html">Read the workflow doc &rarr;</a>
 </div>
 
 Licensed under [Apache 2.0](https://github.com/wrhalpin/SandGNAT/blob/main/LICENSE).
