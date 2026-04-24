@@ -100,6 +100,7 @@ into its database directly.
     <span class="gnat-card-tag">Core platform</span>
     <h3>GNAT</h3>
     <p>The hub TIP. Connector abstraction, STIX 2.1 modelling, investigations, reports, and workflow automation across a large integration surface.</p>
+    <a class="gnat-card-link gnat-link-gnat" href="https://wrhalpin.github.io/GNAT/">Learn more</a>
   </div>
 
   <div class="gnat-card gnat-card-red">
