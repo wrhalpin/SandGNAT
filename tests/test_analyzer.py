@@ -109,6 +109,47 @@ def test_analyze_produces_malware_file_process(tmp_path: Path) -> None:
     assert set(malware["object_refs"]) == other_ids
 
 
+def test_analyze_without_investigation_id_produces_no_grouping(tmp_path: Path) -> None:
+    """Acceptance criterion 4: untagged output is byte-identical to pre-change."""
+    artifacts = _build_fixture(tmp_path)
+    bundle = analyze(
+        analysis_id=ANALYSIS_ID,
+        sample_name="sample.exe",
+        sample_sha256=SAMPLE_SHA,
+        sample_md5=None,
+        artifacts=artifacts,
+        quarantine_root=tmp_path / "quarantine",
+    )
+    types = {o["type"] for o in bundle.stix_objects}
+    assert "grouping" not in types
+    for obj in bundle.stix_objects:
+        assert "x_gnat_investigation_id" not in obj
+
+
+def test_analyze_with_investigation_stamps_every_object(tmp_path: Path) -> None:
+    """Acceptance criterion 2: Grouping present + all objects stamped."""
+    artifacts = _build_fixture(tmp_path)
+    bundle = analyze(
+        analysis_id=ANALYSIS_ID,
+        sample_name="sample.exe",
+        sample_sha256=SAMPLE_SHA,
+        sample_md5=None,
+        artifacts=artifacts,
+        quarantine_root=tmp_path / "quarantine",
+        investigation_id="IC-2026-0001",
+        investigation_link_type="confirmed",
+    )
+    # First object is the Grouping (acceptance: "at the top of the bundle").
+    assert bundle.stix_objects[0]["type"] == "grouping"
+    assert bundle.stix_objects[0]["x_gnat_investigation_id"] == "IC-2026-0001"
+    assert bundle.stix_objects[0]["x_gnat_investigation_origin"] == "sandgnat"
+    # Every other object carries the three custom properties.
+    for obj in bundle.stix_objects[1:]:
+        assert obj["x_gnat_investigation_id"] == "IC-2026-0001"
+        assert obj["x_gnat_investigation_origin"] == "sandgnat"
+        assert obj["x_gnat_investigation_link_type"] == "confirmed"
+
+
 def test_analyze_records_dropped_file_row(tmp_path: Path) -> None:
     artifacts = _build_fixture(tmp_path)
     bundle = analyze(

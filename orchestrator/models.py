@@ -69,6 +69,11 @@ class AnalysisJob:
     static_completed_at: datetime | None = None
     near_duplicate_of: UUID | None = None
     near_duplicate_score: float | None = None
+    # Cross-tool investigation context (migration 004). Opaque to
+    # SandGNAT; validated on the GNAT side when the bundle is pulled.
+    investigation_id: str | None = None
+    investigation_link_type: str | None = None
+    investigation_tenant_id: str | None = None
 
 
 @dataclass(slots=True)

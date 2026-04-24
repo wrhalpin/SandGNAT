@@ -44,6 +44,7 @@ accomplish.
 - [Build the Windows detonation guest](how-to/build-windows-guest.md)
 - [Build the Linux static-analysis guest](how-to/build-linux-guest.md)
 - [Bake a template with anti-analysis mitigations](how-to/bake-template-for-evasion.md)
+- [Submit a sample under a GNAT investigation](how-to/submit-under-investigation.md)
 - [Run the intake service under gunicorn](how-to/run-under-gunicorn.md)
 - [Tune the VM pools](how-to/tune-vm-pools.md)
 - [Query the export API from a script](how-to/query-export-api.md)
@@ -59,6 +60,7 @@ to teach.
 - [Wire protocol (host ↔ guest)](reference/wire-protocol.md)
 - [Celery tasks](reference/celery-tasks.md)
 - [STIX output](reference/stix-output.md)
+- [Investigation context (GNAT-o-sphere)](reference/investigation-context.md)
 
 ### Explanation (understand the "why")
 

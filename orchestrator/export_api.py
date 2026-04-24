@@ -59,6 +59,8 @@ class ExportStore(Protocol):
         sha256: str | None = None,
         status: JobStatus | None = None,
         since: datetime | None = None,
+        investigation_id: str | None = None,
+        has_investigation: bool | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[AnalysisJob]: ...
@@ -75,6 +77,17 @@ class ExportStore(Protocol):
     ) -> list[SimilarityNeighbor]: ...
 
     def export_bundle(self, analysis_id: UUID) -> dict[str, Any]: ...
+
+    # Phase 5 write surface; optional — blueprint returns 501 when a
+    # store omits this. PostgresJobStore + the test fake both implement it.
+    def set_investigation_context(
+        self,
+        analysis_id: UUID,
+        *,
+        investigation_id: str,
+        link_type: str = "inferred",
+        tenant_id: str | None = None,
+    ) -> AnalysisJob | None: ...
 
 
 def make_api_key_auth(cfg: IntakeConfig | None, *, require_api_key: bool) -> Callable:
@@ -191,6 +204,71 @@ def create_export_blueprint(
         neighbours = store.list_similar(uid, **params)
         return jsonify({"items": [_neighbor_to_json(n) for n in neighbours]})
 
+    # Phase 5 of the cross-tool investigation plan: retroactively tag a
+    # completed analysis. Guarded by the same X-API-Key as the read
+    # routes; operators who want to separate read from write auth can
+    # wrap this route with a stricter decorator at deploy time.
+    #
+    # Note: this is a write endpoint on what is otherwise a read-only
+    # blueprint. We intentionally do not regenerate the STIX bundle on
+    # update — the bundle is persisted and consumers may already have
+    # pulled it. The tag is metadata, not re-analysis; GNAT re-stamps
+    # on its side with link_type="inferred" when the tag lands after
+    # the analysis completed.
+    @bp.post("/analyses/<analysis_id>/investigation")
+    @auth
+    def set_investigation(analysis_id: str) -> Any:
+        uid = _parse_uuid_or_400(analysis_id)
+        if isinstance(uid, tuple):
+            return uid
+        job = store.get_job(uid)
+        if job is None:
+            return jsonify({"error": "not found"}), 404
+
+        body = request.get_json(silent=True) or {}
+        inv_id = body.get("investigation_id")
+        if not isinstance(inv_id, str) or not inv_id:
+            return jsonify({"error": "investigation_id is required"}), 400
+        link_type = body.get("link_type", "inferred")
+        tenant_id = body.get("tenant_id") or None
+
+        from .intake import (
+            InvestigationValidationError,
+            validate_investigation_fields,
+        )
+        try:
+            inv_id, tenant_id, link_type = validate_investigation_fields(
+                inv_id, tenant_id, link_type
+            )
+        except InvestigationValidationError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        force = request.args.get("force", "").strip().lower() in {
+            "1", "true", "yes"
+        }
+        if job.investigation_id and not force:
+            return jsonify(
+                {
+                    "error": "investigation_id already set",
+                    "investigation_id": job.investigation_id,
+                    "detail": "pass ?force=true to overwrite",
+                }
+            ), 409
+
+        if not hasattr(store, "set_investigation_context"):
+            return jsonify(
+                {"error": "store does not support retroactive tagging"}
+            ), 501
+        updated = store.set_investigation_context(
+            uid,
+            investigation_id=inv_id,
+            link_type=link_type or "inferred",
+            tenant_id=tenant_id,
+        )
+        if updated is None:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(_job_to_json(updated))
+
     return bp
 
 
@@ -237,10 +315,40 @@ def _parse_list_filters(args) -> dict[str, Any]:  # type: ignore[no-untyped-def]
         if len(sha256) != 64 or not all(c in "0123456789abcdef" for c in sha256):
             raise _BadRequest("sha256 must be 64 hex chars")
 
+    investigation_id = args.get("investigation_id") or None
+    if investigation_id is not None:
+        # Reuse the intake-side validator so API and intake agree on
+        # what a legal investigation_id looks like.
+        from .intake import (
+            InvestigationValidationError,
+            validate_investigation_fields,
+        )
+        try:
+            investigation_id, _, _ = validate_investigation_fields(
+                investigation_id, None, None
+            )
+        except InvestigationValidationError as exc:
+            raise _BadRequest(str(exc)) from exc
+
+    has_investigation_raw = args.get("has_investigation")
+    has_investigation: bool | None = None
+    if has_investigation_raw is not None:
+        lowered = has_investigation_raw.strip().lower()
+        if lowered in {"1", "true", "yes"}:
+            has_investigation = True
+        elif lowered in {"0", "false", "no"}:
+            has_investigation = False
+        else:
+            raise _BadRequest(
+                f"invalid has_investigation: {has_investigation_raw!r}"
+            )
+
     return {
         "sha256": sha256,
         "status": status,
         "since": since,
+        "investigation_id": investigation_id,
+        "has_investigation": has_investigation,
         "limit": limit,
         "offset": offset,
     }

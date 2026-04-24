@@ -18,6 +18,14 @@ port, both gated by `X-API-Key: $INTAKE_API_KEY`.
 | GET    | `/analyses/<uuid>/bundle`         | STIX 2.1 bundle                   |
 | GET    | `/analyses/<uuid>/static`         | static-analysis findings          |
 | GET    | `/analyses/<uuid>/similar`        | LSH + lineage neighbours          |
+| POST   | `/analyses/<uuid>/investigation`  | retroactively tag with an investigation |
+
+GNAT investigation fields: `POST /submit` accepts optional
+`investigation_id`, `investigation_tenant_id`, and
+`investigation_link_type` form fields that travel through to the
+emitted STIX bundle. `GET /analyses` gains `investigation_id=` and
+`has_investigation=true|false` query filters. Full reference:
+[investigation-context](investigation-context.md).
 
 ## Authentication
 

@@ -41,7 +41,8 @@ _JOB_COLUMNS = """
     duration_seconds, timeout_seconds, network_isolation,
     evasion_observed, quarantine_path,
     imphash, ssdeep, tlsh, static_completed_at,
-    near_duplicate_of, near_duplicate_score
+    near_duplicate_of, near_duplicate_score,
+    investigation_id, investigation_link_type, investigation_tenant_id
 """
 
 
@@ -59,7 +60,8 @@ def insert_job(job: AnalysisJob) -> None:
                 timeout_seconds, network_isolation, execution_command,
                 submitter, intake_source, intake_decision, intake_notes, priority,
                 vt_verdict, vt_detection_count, vt_total_engines, vt_last_seen,
-                yara_matches
+                yara_matches,
+                investigation_id, investigation_link_type, investigation_tenant_id
             )
             VALUES (
                 %s, %s, %s, %s,
@@ -67,7 +69,8 @@ def insert_job(job: AnalysisJob) -> None:
                 %s, %s, %s,
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s
+                %s,
+                %s, %s, %s
             )
             """,
             (
@@ -92,6 +95,9 @@ def insert_job(job: AnalysisJob) -> None:
                 job.vt_total_engines,
                 job.vt_last_seen,
                 list(job.yara_matches),
+                job.investigation_id,
+                job.investigation_link_type,
+                job.investigation_tenant_id,
             ),
         )
 
@@ -161,6 +167,9 @@ def _row_to_job(row: Any) -> AnalysisJob:
         static_completed_at=row[29],
         near_duplicate_of=row[30],
         near_duplicate_score=float(row[31]) if row[31] is not None else None,
+        investigation_id=row[32],
+        investigation_link_type=row[33],
+        investigation_tenant_id=row[34],
     )
 
 
@@ -169,6 +178,8 @@ def list_jobs(
     sha256: str | None = None,
     status: JobStatus | None = None,
     since: datetime | None = None,
+    investigation_id: str | None = None,
+    has_investigation: bool | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[AnalysisJob]:
@@ -189,6 +200,13 @@ def list_jobs(
     if since is not None:
         clauses.append("submitted_at >= %s")
         params.append(since)
+    if investigation_id is not None:
+        clauses.append("investigation_id = %s")
+        params.append(investigation_id)
+    if has_investigation is True:
+        clauses.append("investigation_id IS NOT NULL")
+    elif has_investigation is False:
+        clauses.append("investigation_id IS NULL")
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     sql = f"""
         SELECT {_JOB_COLUMNS}
@@ -377,11 +395,19 @@ class PostgresJobStore:
         sha256: str | None = None,
         status: JobStatus | None = None,
         since: datetime | None = None,
+        investigation_id: str | None = None,
+        has_investigation: bool | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[AnalysisJob]:
         return list_jobs(
-            sha256=sha256, status=status, since=since, limit=limit, offset=offset
+            sha256=sha256,
+            status=status,
+            since=since,
+            investigation_id=investigation_id,
+            has_investigation=has_investigation,
+            limit=limit,
+            offset=offset,
         )
 
     def get_static_analysis(self, analysis_id: UUID) -> StaticAnalysisRow | None:
@@ -401,6 +427,50 @@ class PostgresJobStore:
 
     def export_bundle(self, analysis_id: UUID) -> dict[str, Any]:
         return export_bundle(analysis_id)
+
+    def set_investigation_context(
+        self,
+        analysis_id: UUID,
+        *,
+        investigation_id: str,
+        link_type: str = "inferred",
+        tenant_id: str | None = None,
+    ) -> AnalysisJob | None:
+        return set_investigation_context(
+            analysis_id,
+            investigation_id=investigation_id,
+            link_type=link_type,
+            tenant_id=tenant_id,
+        )
+
+
+def set_investigation_context(
+    analysis_id: UUID,
+    *,
+    investigation_id: str,
+    link_type: str = "inferred",
+    tenant_id: str | None = None,
+) -> AnalysisJob | None:
+    """Write the investigation tag onto an existing job row.
+
+    Returns the updated `AnalysisJob` on success, or `None` if the row
+    doesn't exist. Unlike `update_job_status`, this one touches only
+    the three investigation columns — status and timing are untouched.
+    """
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE analysis_jobs
+            SET investigation_id = %s,
+                investigation_link_type = %s,
+                investigation_tenant_id = %s
+            WHERE id = %s
+            """,
+            (investigation_id, link_type, tenant_id, analysis_id),
+        )
+        if cur.rowcount == 0:
+            return None
+    return get_job(analysis_id)
 
 
 def update_job_status(
@@ -663,7 +733,13 @@ def log_event(event: AuditEvent) -> None:
 # ---------------------------------------------------------------------------
 
 def export_bundle(analysis_id: UUID) -> dict[str, Any]:
-    """Assemble every STIX object for an analysis into a 2.1 Bundle."""
+    """Assemble every STIX object for an analysis into a 2.1 Bundle.
+
+    When an investigation Grouping is present (Phase 2 of the
+    investigation-context plan), it is lifted to the front of
+    `objects[]` so consumers that stop at the first object still see
+    the wrapping context block.
+    """
     with connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT stix_object FROM stix_malware WHERE analysis_id = %s", (analysis_id,))
         malware = [row[0] for row in cur.fetchall()]
@@ -674,10 +750,14 @@ def export_bundle(analysis_id: UUID) -> dict[str, Any]:
         cur.execute("SELECT stix_object FROM stix_indicators WHERE analysis_id = %s", (analysis_id,))
         indicators = [row[0] for row in cur.fetchall()]
 
+    combined = [*malware, *observables, *indicators]
+    groupings = [o for o in combined if o.get("type") == "grouping"]
+    rest = [o for o in combined if o.get("type") != "grouping"]
+
     # Defer bundle construction to stix_builder to keep ID derivation consistent.
     from .stix_builder import build_bundle
 
-    return build_bundle([*malware, *observables, *indicators])
+    return build_bundle([*groupings, *rest])
 
 
 def serialize_bundle(analysis_id: UUID) -> str:

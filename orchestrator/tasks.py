@@ -188,6 +188,10 @@ def analyze_malware_sample(
 
         job_row = get_job(job_id)
         sample_md5 = job_row.sample_hash_md5 if job_row else None
+        investigation_id = job_row.investigation_id if job_row else None
+        investigation_link_type = (
+            job_row.investigation_link_type if job_row else None
+        ) or "confirmed"
 
         bundle = analyze(
             analysis_id=job_id,
@@ -196,6 +200,8 @@ def analyze_malware_sample(
             sample_md5=sample_md5,
             artifacts=artifacts,
             quarantine_root=quarantine_root,
+            investigation_id=investigation_id,
+            investigation_link_type=investigation_link_type,
         )
         _persist_bundle(job_id, bundle)
         log_event(

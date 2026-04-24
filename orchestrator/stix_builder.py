@@ -314,3 +314,92 @@ def build_bundle(objects: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "id": f"bundle--{uuid5(SANDGNAT_NS, json.dumps([o['id'] for o in bundle_objects], sort_keys=True))}",
         "objects": bundle_objects,
     }
+
+
+# ---------------------------------------------------------------------------
+# Cross-tool investigation context (GNAT-o-sphere).
+#
+# Canonical spec: wrhalpin/GNAT repo,
+#   docs/reference/investigation-context-schema.md
+#
+# Three custom properties travel on every SandGNAT object that was produced
+# under a GNAT investigation, plus on a wrapping Grouping. Objects emitted
+# from untagged analyses look byte-identical to the pre-context output.
+# ---------------------------------------------------------------------------
+
+INVESTIGATION_ORIGIN_SANDGNAT = "sandgnat"
+
+VALID_LINK_TYPES = frozenset({"confirmed", "inferred", "suggested"})
+
+
+def apply_investigation_context(
+    stix_obj: dict[str, Any],
+    investigation_id: str | None,
+    link_type: str = "confirmed",
+) -> dict[str, Any]:
+    """Stamp the three `x_gnat_investigation_*` properties on `stix_obj`.
+
+    If `investigation_id` is falsy, the object is returned unchanged.
+    Mutates and returns the same dict for caller convenience.
+    """
+    if not investigation_id:
+        return stix_obj
+    if link_type not in VALID_LINK_TYPES:
+        raise ValueError(
+            f"invalid link_type {link_type!r}; expected one of "
+            f"{sorted(VALID_LINK_TYPES)}"
+        )
+    stix_obj["x_gnat_investigation_id"] = investigation_id
+    stix_obj["x_gnat_investigation_origin"] = INVESTIGATION_ORIGIN_SANDGNAT
+    stix_obj["x_gnat_investigation_link_type"] = link_type
+    return stix_obj
+
+
+def stamp_objects_with_investigation(
+    objects: Iterable[dict[str, Any]],
+    investigation_id: str | None,
+    link_type: str = "confirmed",
+) -> list[dict[str, Any]]:
+    """Apply `apply_investigation_context` to every object in `objects`.
+
+    A no-op passthrough (still returns a list) when `investigation_id` is
+    None so callers don't need to branch.
+    """
+    materialised = list(objects)
+    if not investigation_id:
+        return materialised
+    for obj in materialised:
+        apply_investigation_context(obj, investigation_id, link_type)
+    return materialised
+
+
+def build_investigation_grouping(
+    objects: Iterable[dict[str, Any]],
+    analysis_id: UUID,
+    investigation_id: str,
+    link_type: str = "confirmed",
+) -> dict[str, Any]:
+    """Build a STIX 2.1 `Grouping` wrapping every object from one analysis.
+
+    The Grouping carries the three `x_gnat_investigation_*` custom
+    properties *and* so does each of its object_refs, so a consumer that
+    only reads the Grouping still gets the full context block.
+    """
+    if not investigation_id:
+        raise ValueError("investigation_id is required to build a Grouping")
+    if link_type not in VALID_LINK_TYPES:
+        raise ValueError(f"invalid link_type {link_type!r}")
+    object_refs = [obj["id"] for obj in objects]
+    grouping: dict[str, Any] = {
+        "type": "grouping",
+        "spec_version": "2.1",
+        "id": stix_id("grouping", analysis_id, f"investigation:{investigation_id}"),
+        "created": _now_iso(),
+        "modified": _now_iso(),
+        "name": f"SandGNAT analysis {analysis_id}",
+        "context": "malware-analysis",
+        "object_refs": object_refs,
+        "x_analysis_metadata": analysis_metadata(analysis_id),
+    }
+    apply_investigation_context(grouping, investigation_id, link_type)
+    return grouping
