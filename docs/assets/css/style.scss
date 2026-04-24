@@ -1,0 +1,195 @@
+---
+# Front-matter required so Jekyll runs the SCSS through Sass.
+# SPDX-License-Identifier: Apache-2.0
+---
+
+@import "jekyll-theme-cayman";
+
+// ─── SandGNAT brand palette ─────────────────────────────────────────────────
+//
+//  Amber / Gold  #D4A017   primary brand colour (SandGNAT)
+//  Deep Amber    #A87E12   hover + darker gradient stop
+//  Warm Ink      #1A1208   dark text + header gradient start
+//  Graphite      #2B2F3C   secondary text
+//  Mist          #F4ECD8   light highlights, borders
+//  Cloud         #FBF8F1   subtle page surfaces
+//
+//  Cross-repo siblings keep their own accent colours so the
+//  GNAT-o-sphere grid + the Canonical Workflow diagram read as one
+//  family across every Pages site.
+//
+// ────────────────────────────────────────────────────────────────────────────
+
+// ─── GNAT-o-sphere product cards ────────────────────────────────────────────
+//
+// Same class contract SenseGNAT uses, so both sites produce the same
+// visual grid. Accent colours per product are applied further down.
+
+.gnatophere-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.gnat-card {
+  border: 2px solid #F4ECD8;
+  border-radius: 12px;
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(168, 126, 18, 0.08);
+  transition: box-shadow 0.2s;
+
+  &:hover {
+    box-shadow: 0 4px 18px rgba(168, 126, 18, 0.16);
+  }
+
+  h3 {
+    margin-top: .4rem;
+    margin-bottom: .5rem;
+    font-size: 1.1rem;
+  }
+
+  p {
+    flex: 1;
+    font-size: .95rem;
+    color: #444;
+    margin-bottom: 0;
+  }
+}
+
+.gnat-card-tag {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #888;
+  display: block;
+  margin-bottom: 0;
+}
+
+.gnat-card-link {
+  display: inline-block;
+  margin-top: 1rem;
+  padding: .4rem 1.1rem;
+  border-radius: 8px;
+  font-size: .9rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: #fff !important;
+  align-self: flex-start;
+
+  &:hover {
+    opacity: .85;
+    text-decoration: none !important;
+  }
+}
+
+// GNAT — threat-red
+.gnat-card-gnat { border-color: #C41E2A; h3 { color: #C41E2A; } }
+.gnat-link-gnat { background: #C41E2A; }
+
+// SandGNAT — amber
+.gnat-card-sand { border-color: #D4A017; h3 { color: #D4A017; } }
+.gnat-link-sand { background: #D4A017; }
+
+// RedGNAT — crimson
+.gnat-card-red  { border-color: #C0392B; h3 { color: #C0392B; } }
+.gnat-link-red  { background: #C0392B; }
+
+// SenseGNAT — violet
+.gnat-card-sense { border-color: #7C3AED; h3 { color: #7C3AED; } }
+.gnat-link-sense { background: #7C3AED; }
+
+// ─── Canonical workflow diagram ────────────────────────────────────────────
+//
+// Mirrors the GNAT / SenseGNAT flow-teaser so the ecosystem diagram is
+// consistent across every sibling site.
+
+.flow-teaser {
+  display: flex;
+  align-items: stretch;
+  gap: .5rem;
+  margin-bottom: 1rem;
+}
+
+.flow-arrow {
+  display: flex;
+  align-items: center;
+  font-size: 1.25rem;
+  color: #aaa;
+  flex-shrink: 0;
+  padding-top: .5rem;
+}
+
+.flow-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+
+.flow-stage--addons { flex: 1.2; }
+
+.flow-node {
+  background: #fff;
+  border: 1px solid #F4ECD8;
+  border-radius: 10px;
+  padding: .75rem 1rem;
+  flex: 1;
+  box-shadow: 0 1px 4px rgba(168, 126, 18, 0.06);
+
+  strong {
+    display: block;
+    font-size: .95rem;
+    font-weight: 600;
+    margin-bottom: .2rem;
+    color: #1A1208;
+  }
+
+  p {
+    margin: 0;
+    font-size: .78rem;
+    color: #666;
+    line-height: 1.4;
+  }
+}
+
+.flow-step {
+  display: block;
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: #aaa;
+  margin-bottom: .3rem;
+}
+
+.flow-node--gnat    { border-color: #C41E2A; strong { color: #C41E2A; } }
+.flow-node--sense   { border-color: #7C3AED; strong { color: #7C3AED; } }
+.flow-node--sand    { border-color: #D4A017; strong { color: #D4A017; } }
+.flow-node--red     { border-color: #C0392B; strong { color: #C0392B; } }
+.flow-node--neutral { border-color: #F4ECD8; strong { color: #1A1208; } }
+
+.flow-actions {
+  display: flex;
+  gap: 1.5rem;
+  font-size: .875rem;
+  justify-content: flex-end;
+  margin-top: .5rem;
+
+  a {
+    color: #A87E12;
+    text-decoration: none;
+
+    &:hover {
+      color: #D4A017;
+      text-decoration: underline;
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .flow-teaser { flex-direction: column; }
+  .flow-arrow  { justify-content: center; transform: rotate(90deg); }
+}
