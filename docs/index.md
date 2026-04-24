@@ -94,6 +94,8 @@ threat-intel platform. Every sibling emits STIX 2.1 objects and is
 pulled by GNAT through a documented connector rather than writing
 into its database directly.
 
+[Canonical workflow documentation →](https://wrhalpin.github.io/gnat-o-sphere/workflow.html)
+
 <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1.25rem; align-items: stretch;">
 
   <div style="flex: 1 1 240px; background: #fafafa; border: 2px solid #C41E2A; border-radius: 14px; padding: 1.5rem 1.25rem; display: flex; flex-direction: column;">
