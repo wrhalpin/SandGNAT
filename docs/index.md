@@ -113,7 +113,7 @@ into its database directly.
   <div class="gnat-card gnat-card-sense">
     <span class="gnat-card-tag">Addon</span>
     <h3>SenseGNAT</h3>
-    <p>Network sensor + honeypot telemetry. High-volume Kafka ingestion, Redis dedupe, automatic campaign linking back into GNAT.</p>
+    <p>NNetwork profiling and behavior analysis that surfaces anomalies and enriches GNAT investigations with traffic-layer context using network sensor and honeypot telemetry — high-volume ingestion from Kafka topics, Redis dedup, automatic campaign linking.</p>
     <a class="gnat-card-link gnat-link-sense" href="https://wrhalpin.github.io/SenseGNAT/">Learn more</a>
   </div>
 
