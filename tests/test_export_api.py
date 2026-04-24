@@ -60,6 +60,8 @@ class _Store:
         sha256: str | None = None,
         status: JobStatus | None = None,
         since: datetime | None = None,
+        investigation_id: str | None = None,
+        has_investigation: bool | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[AnalysisJob]:
@@ -72,6 +74,12 @@ class _Store:
             items = [
                 j for j in items if j.submitted_at is not None and j.submitted_at >= since
             ]
+        if investigation_id is not None:
+            items = [j for j in items if j.investigation_id == investigation_id]
+        if has_investigation is True:
+            items = [j for j in items if j.investigation_id is not None]
+        elif has_investigation is False:
+            items = [j for j in items if j.investigation_id is None]
         items.sort(
             key=lambda j: j.submitted_at or datetime.min.replace(tzinfo=timezone.utc),
             reverse=True,
@@ -102,6 +110,22 @@ class _Store:
         return self.bundles.get(
             analysis_id, {"type": "bundle", "id": f"bundle--{analysis_id}", "objects": []}
         )
+
+    def set_investigation_context(
+        self,
+        analysis_id: UUID,
+        *,
+        investigation_id: str,
+        link_type: str = "inferred",
+        tenant_id: str | None = None,
+    ) -> AnalysisJob | None:
+        job = self.jobs.get(analysis_id)
+        if job is None:
+            return None
+        job.investigation_id = investigation_id
+        job.investigation_link_type = link_type
+        job.investigation_tenant_id = tenant_id
+        return job
 
 
 def _cfg(api_key: str = "secret-key") -> IntakeConfig:

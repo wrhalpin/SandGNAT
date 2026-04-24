@@ -32,6 +32,7 @@ import hashlib
 import logging
 import mimetypes
 import os
+import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,6 +46,58 @@ from .yara_scanner import YaraMatch, YaraScanner
 log = logging.getLogger(__name__)
 
 MAX_SAMPLE_NAME_LEN = 255
+
+# Cross-tool investigation context (migration 004). IDs are opaque to
+# SandGNAT but we cap length + character set so a pathological value
+# can't blow up the partial index on investigation_id.
+MAX_INVESTIGATION_ID_LEN = 128
+_INVESTIGATION_ID_RE = re.compile(r"^[A-Za-z0-9_.:\-]+$")
+VALID_INVESTIGATION_LINK_TYPES = frozenset({"confirmed", "inferred", "suggested"})
+
+
+class InvestigationValidationError(ValueError):
+    """Raised when investigation_id / tenant_id / link_type fail validation."""
+
+
+def validate_investigation_fields(
+    investigation_id: str | None,
+    investigation_tenant_id: str | None,
+    investigation_link_type: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    """Validate the three optional investigation fields supplied at intake.
+
+    Returns a normalised tuple `(id, tenant_id, link_type)`. If
+    `investigation_id` is None, the tenant_id and link_type are
+    ignored and returned as None so the downstream row stays clean.
+    Raises `InvestigationValidationError` on any violation.
+    """
+    if not investigation_id:
+        return (None, None, None)
+    if len(investigation_id) > MAX_INVESTIGATION_ID_LEN:
+        raise InvestigationValidationError(
+            f"investigation_id exceeds {MAX_INVESTIGATION_ID_LEN} chars"
+        )
+    if not _INVESTIGATION_ID_RE.match(investigation_id):
+        raise InvestigationValidationError(
+            "investigation_id must match [A-Za-z0-9_.:-]+"
+        )
+    tenant = investigation_tenant_id or None
+    if tenant is not None:
+        if len(tenant) > MAX_INVESTIGATION_ID_LEN:
+            raise InvestigationValidationError(
+                f"investigation_tenant_id exceeds {MAX_INVESTIGATION_ID_LEN} chars"
+            )
+        if not _INVESTIGATION_ID_RE.match(tenant):
+            raise InvestigationValidationError(
+                "investigation_tenant_id must match [A-Za-z0-9_.:-]+"
+            )
+    link = investigation_link_type or "confirmed"
+    if link not in VALID_INVESTIGATION_LINK_TYPES:
+        raise InvestigationValidationError(
+            "investigation_link_type must be one of "
+            + ", ".join(sorted(VALID_INVESTIGATION_LINK_TYPES))
+        )
+    return (investigation_id, tenant, link)
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +137,9 @@ class IntakeReport:
     vt_verdict: VTVerdict | None = None
     yara_matches: list[YaraMatch] = field(default_factory=list)
     priority: int = 5
+    investigation_id: str | None = None
+    investigation_link_type: str | None = None
+    investigation_tenant_id: str | None = None
 
 
 class JobStore(Protocol):
@@ -197,8 +253,14 @@ def ingest_submission(
     intake_source: str | None = None,
     priority: int = 5,
     force: bool = False,
+    investigation_id: str | None = None,
+    investigation_tenant_id: str | None = None,
+    investigation_link_type: str | None = None,
 ) -> IntakeReport:
     """Validate, pre-classify, and enqueue a sample. See module docstring."""
+    inv_id, inv_tenant, inv_link = validate_investigation_fields(
+        investigation_id, investigation_tenant_id, investigation_link_type
+    )
     clean_name = _sanitize_name(sample_name)
 
     if len(data) < min_sample_bytes:
@@ -262,6 +324,9 @@ def ingest_submission(
         vt_total_engines=(vt_verdict.total_engines if vt_verdict else None),
         vt_last_seen=(vt_verdict.last_seen if vt_verdict else None),
         yara_matches=[m.rule for m in yara_matches],
+        investigation_id=inv_id,
+        investigation_link_type=inv_link,
+        investigation_tenant_id=inv_tenant,
     )
     effective_name = clean_name or f"{hashes.sha256}.bin"
     store.insert_job(job)
@@ -295,4 +360,7 @@ def ingest_submission(
         vt_verdict=vt_verdict,
         yara_matches=yara_matches,
         priority=effective_priority,
+        investigation_id=inv_id,
+        investigation_link_type=inv_link,
+        investigation_tenant_id=inv_tenant,
     )

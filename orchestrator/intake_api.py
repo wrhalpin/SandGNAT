@@ -35,7 +35,11 @@ from werkzeug.exceptions import HTTPException
 
 from .config import IntakeConfig, get_settings
 from .export_api import create_export_blueprint, make_api_key_auth
-from .intake import IntakeReport, ingest_submission
+from .intake import (
+    InvestigationValidationError,
+    IntakeReport,
+    ingest_submission,
+)
 from .vt_client import VTClient
 from .yara_scanner import YaraScanner
 
@@ -113,22 +117,35 @@ def create_app(
             return jsonify({"error": f"invalid priority: {priority_raw!r}"}), 400
         force = request.form.get("force", "").lower() in {"1", "true", "yes"}
 
-        report = ingest_submission(
-            data,
-            sample_name=upload.filename or request.form.get("name"),
-            store=resolved_store,
-            enqueue=resolved_enqueue,
-            staging_root=effective_staging_root,
-            vt=resolved_vt,
-            yara=resolved_yara,
-            max_sample_bytes=cfg.max_sample_bytes,
-            min_sample_bytes=cfg.min_sample_bytes,
-            timeout_seconds=effective_timeout,
-            submitter=submitter,
-            intake_source=request.headers.get("X-Intake-Source") or "http",
-            priority=priority,
-            force=force,
-        )
+        # Cross-tool investigation context (GNAT-o-sphere). All three
+        # fields are optional; the validator below rejects malformed
+        # IDs before we create a row.
+        investigation_id = request.form.get("investigation_id") or None
+        investigation_tenant_id = request.form.get("investigation_tenant_id") or None
+        investigation_link_type = request.form.get("investigation_link_type") or None
+
+        try:
+            report = ingest_submission(
+                data,
+                sample_name=upload.filename or request.form.get("name"),
+                store=resolved_store,
+                enqueue=resolved_enqueue,
+                staging_root=effective_staging_root,
+                vt=resolved_vt,
+                yara=resolved_yara,
+                max_sample_bytes=cfg.max_sample_bytes,
+                min_sample_bytes=cfg.min_sample_bytes,
+                timeout_seconds=effective_timeout,
+                submitter=submitter,
+                intake_source=request.headers.get("X-Intake-Source") or "http",
+                priority=priority,
+                force=force,
+                investigation_id=investigation_id,
+                investigation_tenant_id=investigation_tenant_id,
+                investigation_link_type=investigation_link_type,
+            )
+        except InvestigationValidationError as exc:
+            return jsonify({"error": str(exc)}), 400
 
         status = 202 if report.decision in {"queued", "prioritized"} else 200
         if report.decision == "rejected":
@@ -200,6 +217,9 @@ def _report_to_json(report: IntakeReport) -> dict[str, Any]:
             {"rule": m.rule, "tags": list(m.tags), "meta": m.meta or {}}
             for m in report.yara_matches
         ],
+        "investigation_id": report.investigation_id,
+        "investigation_link_type": report.investigation_link_type,
+        "investigation_tenant_id": report.investigation_tenant_id,
     }
 
 

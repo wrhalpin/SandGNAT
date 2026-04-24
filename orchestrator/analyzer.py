@@ -31,9 +31,11 @@ from .stix_builder import (
     FileHashes,
     build_file,
     build_indicator,
+    build_investigation_grouping,
     build_malware,
     build_network_traffic,
     build_process,
+    stamp_objects_with_investigation,
     stix_id,
 )
 
@@ -59,8 +61,16 @@ def analyze(
     sample_md5: str | None,
     artifacts: ArtifactLocations,
     quarantine_root: Path,
+    investigation_id: str | None = None,
+    investigation_link_type: str = "confirmed",
 ) -> AnalyzedBundle:
-    """Produce an AnalyzedBundle from a guest's completed artifacts."""
+    """Produce an AnalyzedBundle from a guest's completed artifacts.
+
+    When `investigation_id` is set, every STIX object has the three
+    `x_gnat_investigation_*` properties stamped on it and a wrapping
+    `Grouping` is prepended to `stix_objects`. When it's None the
+    output is byte-identical to the pre-context pipeline.
+    """
     bundle = AnalyzedBundle()
     envelope = artifacts.envelope
 
@@ -173,6 +183,25 @@ def analyze(
             confidence_level=_confidence_from_envelope(envelope, bundle),
         ),
     )
+
+    # --- Investigation context (optional, additive) ------------------------
+    # Only fires when intake recorded an investigation_id on the job. The
+    # helper short-circuits on falsy input so untagged analyses produce
+    # byte-identical output to the pre-context pipeline.
+    if investigation_id:
+        stamp_objects_with_investigation(
+            bundle.stix_objects,
+            investigation_id,
+            investigation_link_type,
+        )
+        grouping = build_investigation_grouping(
+            bundle.stix_objects,
+            analysis_id=analysis_id,
+            investigation_id=investigation_id,
+            link_type=investigation_link_type,
+        )
+        bundle.stix_objects.insert(0, grouping)
+
     return bundle
 
 

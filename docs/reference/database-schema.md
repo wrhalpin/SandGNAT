@@ -56,6 +56,9 @@ erDiagram
         TEXT tlsh
         UUID near_duplicate_of FK
         NUMERIC near_duplicate_score
+        TEXT investigation_id
+        TEXT investigation_link_type
+        TEXT investigation_tenant_id
         TIMESTAMPTZ submitted_at
         TIMESTAMPTZ started_at
         TIMESTAMPTZ completed_at
@@ -250,8 +253,11 @@ Lifecycle root. Every other table links back via `analysis_id`.
 | `static_completed_at`   | TIMESTAMPTZ    | When static stage finished             |
 | `near_duplicate_of`     | UUID FK        | Parent analysis_id if short-circuited  |
 | `near_duplicate_score`  | NUMERIC(4,3)   | 0.000–1.000                            |
+| `investigation_id`      | TEXT           | GNAT investigation tag (migration 004). Opaque string, never validated against GNAT. |
+| `investigation_link_type` | TEXT         | `confirmed` / `inferred` / `suggested` (CHECK constraint). Defaults to `confirmed`.  |
+| `investigation_tenant_id` | TEXT         | Optional multi-tenant correlation tag. |
 
-**Indices:** sha256, status, submitted_at DESC, priority, intake_decision, md5, yara_matches (GIN), imphash, near_duplicate_of.
+**Indices:** sha256, status, submitted_at DESC, priority, intake_decision, md5, yara_matches (GIN), imphash, near_duplicate_of, investigation_id (partial, WHERE NOT NULL).
 
 ### `vm_pool_leases` (migration 002 + 003)
 

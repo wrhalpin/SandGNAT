@@ -101,24 +101,61 @@ curl -sS -H "X-API-Key: $INTAKE_API_KEY" \
      http://localhost:8080/jobs/<analysis_id>
 ```
 
+### Submitting under a GNAT investigation
+
+SandGNAT accepts three optional form fields that plumb a
+[GNAT investigation](https://github.com/wrhalpin/GNAT) through to the
+produced STIX bundle. Every object emitted by the analysis is stamped
+with `x_gnat_investigation_id`, `x_gnat_investigation_origin=sandgnat`,
+and `x_gnat_investigation_link_type`, and a wrapping STIX `Grouping`
+is added to the front of the bundle.
+
+```bash
+curl -sS -H "X-API-Key: $INTAKE_API_KEY" \
+     -F "file=@/path/to/sample.exe" \
+     -F "investigation_id=IC-2026-0042" \
+     -F "investigation_tenant_id=acme-co" \
+     -F "investigation_link_type=confirmed" \
+     http://localhost:8080/submit
+```
+
+All three are optional; `investigation_link_type` defaults to
+`confirmed`. IDs must match `^[A-Za-z0-9_.:\-]+$` and be ≤ 128 chars.
+Analyses submitted without an `investigation_id` are byte-identical to
+the pre-investigation output — no stamping, no Grouping.
+
 ## Querying results (GNAT connector surface)
 
 Read-only endpoints on the same service, same `X-API-Key`. These are the
 contract the `gnat.connectors.sandgnat` connector consumes:
 
 ```
-GET /analyses                     list + filters (sha256, status, since), paginated
-GET /analyses/<uuid>              one job row
-GET /analyses/<uuid>/bundle       full STIX 2.1 bundle (409 if not completed)
-GET /analyses/<uuid>/static       static-analysis findings + fuzzy hashes
-GET /analyses/<uuid>/similar      LSH + lineage neighbours (threshold, flavour, limit)
+GET  /analyses                          list + filters, paginated.
+                                        Filters: sha256, status, since,
+                                                 investigation_id,
+                                                 has_investigation
+GET  /analyses/<uuid>                   one job row (includes investigation_*)
+GET  /analyses/<uuid>/bundle            full STIX 2.1 bundle. When the job has an
+                                        investigation_id, every object carries
+                                        x_gnat_investigation_* and a wrapping
+                                        Grouping sits at the top of objects[].
+                                        409 if not completed.
+GET  /analyses/<uuid>/static            static-analysis findings + fuzzy hashes
+GET  /analyses/<uuid>/similar           LSH + lineage neighbours
+POST /analyses/<uuid>/investigation     retroactively tag an analysis. Body:
+                                        {"investigation_id":"...","link_type":
+                                         "inferred","tenant_id":"..."}. 409 if
+                                        already set; pass ?force=true to
+                                        overwrite. The bundle is not
+                                        regenerated — the tag is row metadata.
 ```
 
-Example — pull every completed analysis from the last hour:
+Example — pull every completed analysis from the last hour for one
+investigation:
 
 ```bash
 curl -sS -H "X-API-Key: $INTAKE_API_KEY" \
-     "http://localhost:8080/analyses?status=completed&since=$(date -u -d '1 hour ago' +%FT%TZ)"
+     "http://localhost:8080/analyses?status=completed&investigation_id=IC-2026-0001&since=$(date -u -d '1 hour ago' +%FT%TZ)"
 ```
 
 Env knobs for intake:
