@@ -106,7 +106,7 @@ into its database directly.
   <div class="gnat-card gnat-card-red">
     <span class="gnat-card-tag">Addon</span>
     <h3>RedGNAT</h3>
-    <p>Continuous automated red teaming — ingests threat intel, constructs adversary emulation scenarios, executes them with safety controls.</p>
+    <p>Continuous automated readiness testing — ingests threat intel, constructs adversary emulation scenarios, executes them with safety controls.</p>
     <a class="gnat-card-link gnat-link-red" href="https://wrhalpin.github.io/RedGNAT/">Learn more</a>
   </div>
 
