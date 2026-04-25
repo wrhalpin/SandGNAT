@@ -8,6 +8,17 @@ description: >-
 # "just-the-docs" (needs the gem), "pages-themes/cayman".
 theme: jekyll-theme-cayman
 
+# Plugins. jekyll-relative-links rewrites markdown-style `.md` links so
+# they resolve at the rendered `.html` URL on the Pages site — without
+# this, every cross-doc link in our Diátaxis tree would 404 even though
+# it works on github.com's rendered markdown.
+plugins:
+  - jekyll-relative-links
+
+relative_links:
+  enabled: true
+  collections: true
+
 # Repo link at the top of every page.
 show_downloads: false
 github:
