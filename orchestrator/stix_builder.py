@@ -218,7 +218,11 @@ def build_process(
         obj["created_time"] = created_time
     children = list(child_process_refs)
     if children:
-        obj["x_child_process_refs"] = children
+        # STIX 2.1 process SCOs carry child references in the standard
+        # `child_refs` property — use it so any STIX-aware consumer can walk
+        # the process tree (the old `x_child_process_refs` custom key was
+        # invisible to standard tooling).
+        obj["child_refs"] = children
     regmods = list(registry_modifications)
     if regmods:
         obj["x_registry_modifications"] = regmods
@@ -314,8 +318,12 @@ def build_indicator(
         ),
     }
     if kill_chain_phase:
+        # phase_name carries an ATT&CK tactic (e.g. "persistence"), so the
+        # kill_chain_name must be "mitre-attack" — the STIX idiom for ATT&CK.
+        # (The old "lockheed-martin-cyber-kill-chain" value was inconsistent
+        # with the ATT&CK-style phase names actually passed here.)
         obj["kill_chain_phases"] = [
-            {"kill_chain_name": "lockheed-martin-cyber-kill-chain", "phase_name": kill_chain_phase}
+            {"kill_chain_name": "mitre-attack", "phase_name": kill_chain_phase}
         ]
     refs = list(observable_refs)
     if refs:

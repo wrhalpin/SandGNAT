@@ -134,7 +134,7 @@ One per distinct PID observed in ProcMon.
   "created_time": "2026-04-17T12:00:00.000000Z",
   "binary_ref": "file--...",            // if name ends .exe
   "parent_ref": "process--...",          // when known
-  "child_process_refs": ["process--..."],
+  "child_refs": ["process--..."],        // STIX 2.1 standard process children
   "x_registry_modifications": [
     {
       "action": "set_value",

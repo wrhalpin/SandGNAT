@@ -107,9 +107,17 @@ curl -sS \
     "total_engines": null,
     "last_seen": null
   },
-  "yara_matches": []
+  "yara_matches": [
+    {"rule": "EvilCorp_Stealer", "tags": ["stealer"], "meta": {"severity": "high"}}
+  ]
 }
 ```
+
+> **Shape note:** on `POST /submit`, `yara_matches` is a list of objects
+> (`{rule, tags, meta}`) from the fresh intake scan. On the read side
+> (`GET /analyses`, `GET /analyses/<id>`) the same field is a list of rule-name
+> **strings** — the stored row keeps only the rule names. Parse the two
+> endpoints accordingly.
 
 **`decision` values:**
 
