@@ -43,6 +43,22 @@ def test_manifest_roundtrip() -> None:
     assert parsed == original
 
 
+def test_capture_suppress_activity_roundtrips() -> None:
+    original = _sample_manifest()
+    original.capture.suppress_activity = True
+    parsed = JobManifest.from_json(original.to_json())
+    assert parsed.capture.suppress_activity is True
+
+
+def test_capture_suppress_activity_defaults_false_for_legacy_manifest() -> None:
+    # A manifest whose capture block omits the field (pre-Phase-D wire form)
+    # must still parse, defaulting to False.
+    payload = json.loads(_sample_manifest().to_json())
+    payload["capture"].pop("suppress_activity", None)
+    parsed = JobManifest.from_json(json.dumps(payload))
+    assert parsed.capture.suppress_activity is False
+
+
 def test_manifest_rejects_wrong_schema_version() -> None:
     payload = json.loads(_sample_manifest().to_json())
     payload["schema_version"] = 999

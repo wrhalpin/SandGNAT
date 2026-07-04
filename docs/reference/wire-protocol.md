@@ -100,6 +100,10 @@ class CaptureConfig:
     procmon: bool = True
     tshark: bool = True
     regshot: bool = True
+    # Phase-D opt-out: skip the user-activity simulator for GUI-driven
+    # samples. Additive optional field — legacy manifests that omit it
+    # parse unchanged (default False).
+    suppress_activity: bool = False
     dropped_file_roots: list[str] = [
         r"C:\Users\Analyst\AppData\Local\Temp",
         r"C:\Users\Analyst\AppData\Roaming",

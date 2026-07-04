@@ -201,12 +201,18 @@ after `configure-capture.ps1`:
 
 - Creates a realistic user account (random first.last, random 6-digit
   age, parametrised via `-UserName`).
-- Populates `Documents/`, `Downloads/`, `Pictures/` with stock content
-  (shipped in `infra/guest/seed-data/`).
-- Seeds browser history by running a Chromium/Edge profile generator
-  against a curated 200-site list.
+- Populates `Documents/`, `Downloads/`, `Pictures/` from
+  `infra/guest/seed-data/` when the operator has staged content there,
+  else writes small placeholder files. The repo ships only that
+  directory's README — the corpus is operator-supplied (potentially
+  copyrighted), not bundled.
 - Adds entries to Recent Documents (`shell:recent`) for the last 30
   days.
+
+> **Not yet implemented:** browser-history seeding (a Chromium/Edge
+> profile generator over a curated site list) is planned but not in the
+> current `seed-user-profile.ps1`. A sample that inspects browser
+> history still sees an empty profile until this lands.
 - Domain-joins to a sacrificial AD forest if `-DomainController` is
   provided, else leaves the machine in a realistic local WORKGROUP
   named `WORKGROUP` (not `SANDBOX`).
@@ -290,13 +296,22 @@ analyst's behavioural window opens. After that the simulator runs.
 
 ### E. Time-acceleration defence (2 weeks)
 
-**Shipped** (`511a8f0` DLL source; `49ad29a` Python wiring). Code:
-`guest_agent/stealth/sleep_patcher/` (C++ DLL with MinHook, built
-separately on Windows — see that directory's README),
-`guest_agent/stealth/injector.py` (CreateRemoteThread +
+**Source shipped; DLL is build-on-Windows** (`511a8f0` DLL source;
+`49ad29a` Python wiring). Code:
+`guest_agent/stealth/sleep_patcher/` (C++ source for a MinHook-based
+DLL), `guest_agent/stealth/injector.py` (CreateRemoteThread +
 LoadLibraryW via ctypes), `guest_agent/stealth/log_parser.py`. The
-Python injector is import-safe on Linux; the DLL is Windows-only
-and ships as a build artefact next to the frozen agent.
+Python injector and log parser are real and import-safe on Linux.
+
+> **Build required before this phase does anything.** No compiled
+> `sleep_patcher.dll` is committed, and MinHook is **not** vendored —
+> `CMakeLists.txt` clones it into `third_party/minhook/` at build time
+> (`.gitignore` excludes that tree). On a fresh checkout the runner's
+> `_locate_sleep_patcher_dll()` finds no DLL and degrades to a no-op, so
+> sleep-patching is inert until an operator builds the DLL on Windows
+> (per `guest_agent/stealth/sleep_patcher/README.md`) and drops it next
+> to the frozen agent. Phase G still flags the sleep-import pattern in
+> the meantime.
 
 Target: defeat sleep-based and RDTSC-based stalling.
 
@@ -358,7 +373,7 @@ appears on boot.
 **Shipped** (`a2b2356` detector + rules; `49ad29a` sleep-patch
 indicator). Code: `orchestrator/evasion_detector.py` (pure analyzer
 over ProcMon events + StaticAnalysisRow + sleep_patcher.dll's
-JSONL), `infra/yara/anti_vm.yar` (six rules tagged `anti_vm`
+JSONL), `infra/yara/anti_vm.yar` (seven rules tagged `anti_vm`
 / `anti_analysis` / `anti_debug`). Wired into
 `tasks.analyze_malware_sample` between quarantine and
 `update_job_status(COMPLETED)`; flips
@@ -368,28 +383,43 @@ audit event on any hit.
 Target: observe and flag when a sample is *trying* to detect us, even
 if our mitigations worked.
 
-**New: `orchestrator/evasion_detector.py`** — a post-run analyzer
-that reads the ProcMon CSV + static-analysis envelope and flags any
-of:
+**`orchestrator/evasion_detector.py`** — a post-run analyzer over the
+parsed ProcMon events + the `StaticAnalysisRow` + the sleep-patch log.
+What it actually flags today:
 
-- CPUID instruction usage patterns (from capstone disassembly).
 - Registry reads under `HKLM\HARDWARE\ACPI\DSDT`, `SystemBiosVersion`,
-  `VideoBiosVersion`.
-- File-exists checks for known VM artifacts (see §3 file-path list).
-- Process-list enumeration calls (`CreateToolhelp32Snapshot` +
-  `Process32First`) where one of the known analysis-tool names is
-  string-compared.
-- Long `Sleep()` imports with constants > 30 000 ms observed
-  post-patch.
-- `GetLastInputInfo` / `GetCursorPos` in a loop.
+  `VideoBiosVersion`, and VMware/VirtualBox service keys (ProcMon
+  `RegQueryValue`/`RegOpenKey`).
+- File-exists checks for known VM artifacts (VMware/VirtualBox driver
+  paths + device objects; see §3), via ProcMon
+  `CreateFile`/`QueryAttributes`.
+- Analysis-tool enumeration — references to `procmon` / `wireshark` /
+  `x64dbg` / `idaq` etc. by name in the ProcMon path or detail column.
+- **Static** suspicious imports — `Sleep`, `SleepEx`,
+  `NtDelayExecution`, `GetLastInputInfo`, `GetCursorPos`,
+  `IsDebuggerPresent`, and similar, matched as import names in the
+  static-analysis row (low severity alone; escalated when paired with a
+  runtime hit).
+- Sleep-stall events truncated by Phase E's `sleep_patcher.dll` (one
+  high-severity indicator per patched call).
+- Deep-YARA matches tagged `anti_vm`/`anti_analysis`/`anti_debug` and
+  capa capabilities under the `anti-analysis` namespace.
 
 Each hit writes `evasion_observed = TRUE` on the `analysis_jobs` row
-(column already exists from migration 001) plus a structured JSON
-blob in `analysis_audit_log` with the specific indicator.
+(column exists from migration 001) plus a structured JSON blob in
+`analysis_audit_log` with the specific indicator.
 
-**YARA companion:** `infra/yara/anti_vm.yar` ships rules keyed on the
-detection patterns above (both static strings and YARA-X
-`vt.behaviour.*` equivalents). Loaded by the deep-scan stage.
+> **Not yet implemented:** CPUID-usage detection via capstone
+> disassembly, and *runtime* loop-pattern detection of
+> `GetLastInputInfo`/`GetCursorPos` (today these are caught only as
+> static import names, not as polling loops). The detector does no
+> disassembly.
+
+**YARA companion:** `infra/yara/anti_vm.yar` ships seven static-string
+rules keyed on the detection patterns above (VMware/VirtualBox
+artifacts, BIOS-registry probes, MAC OUIs, well-known anti-debug APIs,
+analysis-tool process names, sleep-stalling imports). Loaded by the
+deep-scan stage; matches surface through `deep_yara_matches`.
 
 This matters even when evasion succeeds — an analyst looking at a
 detonation where `evasion_observed=TRUE` knows the sample *tried* to
@@ -405,13 +435,15 @@ hide, which is signal about its sophistication and origin.
 | B | `infra/guest/`, seed-data | None |
 | C | `infra/guest/configure-capture.ps1` | None |
 | D | `guest_agent/activity/` (new) | `pywin32` (already pulled) |
-| E | `guest_agent/stealth/` (new), PyInstaller bundle | MinHook (vendored) |
+| E | `guest_agent/stealth/` (new), PyInstaller bundle | MinHook (cloned at build time into `third_party/minhook/`; not vendored) |
 | F | `infra/opnsense/`, `infra/inetsim/` (new) | `tc` on Proxmox host |
 | G | `orchestrator/evasion_detector.py`, `infra/yara/anti_vm.yar` | None — `evasion_observed` column exists |
 
 None of A–G breaks the existing staging/manifest protocol; the wire
-schema stays at v2 and both guests are unchanged except for the
-activity-simulator subprocess added by the Windows guest.
+schema stays at v2. The one manifest change is an additive optional
+`CaptureConfig.suppress_activity` flag (default `False`) — legacy
+manifests that omit it parse unchanged, but the Windows guest must be
+re-frozen to honour it and to run the activity-simulator threads.
 
 ## Verification harness
 
@@ -468,12 +500,13 @@ engineer-discretion.
 | A     | `b37d8a7`           | `infra/proxmox/harden-template.sh` + README            |
 | B     | `0c83008`           | `infra/guest/seed-user-profile.ps1` + seed-data/ + README updates |
 | C     | `30a6a8f`           | `configure-capture.ps1` rewrite + guest_agent/config defaults |
-| D     | `44ce4d5`           | `guest_agent/activity/` package + 15 tests             |
-| E     | `511a8f0`, `49ad29a` | `guest_agent/stealth/sleep_patcher/` (C++ DLL) + `stealth/injector.py` + `stealth/log_parser.py` + 10 tests |
+| D     | `44ce4d5`           | `guest_agent/activity/` package (`tests/test_activity.py`) |
+| E     | `511a8f0`, `49ad29a` | `guest_agent/stealth/sleep_patcher/` (C++ source) + `stealth/injector.py` + `stealth/log_parser.py` (`tests/test_stealth.py`) |
 | F     | `c593567`           | `infra/inetsim/` (config + DNS whitelist + netem + responses) + OPNsense README |
-| G     | `a2b2356`           | `orchestrator/evasion_detector.py` + `infra/yara/anti_vm.yar` + tasks.py wiring + 21 tests |
+| G     | `a2b2356`           | `orchestrator/evasion_detector.py` + `infra/yara/anti_vm.yar` + tasks.py wiring (`tests/test_evasion_detector.py`) |
 
 All seven phases landed on `claude/intake-service-vm-manager-Azqfw`
-with the suite at 187/187 passing. Operator-facing runbook:
+with the offline test suite green (`pytest tests/`). Operator-facing
+runbook:
 [how-to/bake-template-for-evasion](../how-to/bake-template-for-evasion.md).
 
