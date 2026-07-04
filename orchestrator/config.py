@@ -48,6 +48,10 @@ class ProxmoxConfig:
     node: str
     template_vmid: int
     clean_snapshot: str
+    # How long to wait for a freshly-cloned VM to report `running` before
+    # giving up. A slow linked-clone boot should not be mistaken for an
+    # analysis failure.
+    clone_boot_timeout_seconds: int = 120
 
 
 @dataclass(frozen=True)
@@ -143,6 +147,7 @@ def get_settings() -> Settings:
         node=_env("PROXMOX_NODE", required=True),
         template_vmid=_env_int("PROXMOX_TEMPLATE_VMID", 9000),
         clean_snapshot=_env("PROXMOX_CLEAN_SNAPSHOT", "clean"),
+        clone_boot_timeout_seconds=_env_int("PROXMOX_CLONE_BOOT_TIMEOUT_SECONDS", 120),
     )
     vm_pool = VmPoolConfig(
         vmid_min=_env_int("VM_POOL_VMID_MIN", 9100),

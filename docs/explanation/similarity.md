@@ -128,10 +128,28 @@ different byte-wise but disassembles to the same mnemonic stream once
 unpacked (assuming the sample unpacks itself; we disassemble the
 on-disk form).
 
+> **Implementation caveat.** The guest's section metadata
+> (`pe_elf.py`) doesn't currently carry each section's raw file offset,
+> so `disasm_trigrams._executable_section_bytes` concatenates the
+> executable sections' raw sizes **sequentially from offset 0** rather
+> than slicing at true `PointerToRawData`/`sh_offset` boundaries. The
+> result is deterministic — identical inputs always yield identical
+> signatures, so exact and near-duplicate detection work — but the
+> disassembly window is an approximation of the real code bytes, not a
+> byte-exact section extraction. Tightening this to true offsets is a
+> future improvement and would require a `SIGNATURE_VERSION` bump
+> (invalidating stored signatures).
+
 SandGNAT stores **both** flavours and computes similarity on each
 independently. The `flavour` config (`STATIC_SHORT_CIRCUIT_FLAVOUR=
 byte|opcode|either`) picks which flavour's hit triggers the
 short-circuit. Default: `either` — accept whichever scores higher.
+
+The static stage also computes **ssdeep** and **TLSH** fuzzy hashes,
+but those are stored and surfaced for analyst reference only (via
+`GET /analyses/<id>/static`) — the similarity/short-circuit engine
+uses the trigram MinHash + LSH bands exclusively. ssdeep/TLSH do not
+feed clustering.
 
 See the `sample_trigrams` and `sample_minhash_bands` tables in the
 [database reference](../reference/database-schema.md) for how the

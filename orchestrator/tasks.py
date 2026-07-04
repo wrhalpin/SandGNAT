@@ -164,7 +164,7 @@ def analyze_malware_sample(
             log.warning("VM pool exhausted for job %s; deferring retry", job_id)
             raise self.retry(exc=exc, countdown=30) from exc
 
-        vm = _clone_and_start(client, acquired_vmid, job_id)
+        vm = _clone_and_start(client, acquired_vmid, job_id, settings)
         log_event(AuditEvent(job_id, "vm_spun_up", {"vmid": vm.vmid}))
 
         submit_job(
@@ -319,10 +319,17 @@ def analyze_malware_sample(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _clone_and_start(client: ProxmoxClient, vmid: int, job_id: UUID) -> GuestVM:
+def _clone_and_start(
+    client: ProxmoxClient, vmid: int, job_id: UUID, settings
+) -> GuestVM:
+    # Clear any leftover clone at this vmid from a crashed/redelivered run
+    # before cloning, so acks_late redelivery doesn't collide (B3).
+    client.destroy_if_exists(GuestVM(vmid=vmid, node=settings.proxmox.node))
     vm = client.clone_from_template(new_vmid=vmid, name=f"sandgnat-{vmid}")
     client.start(vm)
-    client.wait_for_status(vm, "running")
+    client.wait_for_status(
+        vm, "running", timeout=settings.proxmox.clone_boot_timeout_seconds
+    )
     return vm
 
 

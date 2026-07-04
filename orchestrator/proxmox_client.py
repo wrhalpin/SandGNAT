@@ -74,6 +74,32 @@ class ProxmoxClient:
         """Delete the VM definition. Used for disposable clones after use."""
         self._api.nodes(vm.node).qemu(vm.vmid).delete()
 
+    def exists(self, vm: GuestVM) -> bool:
+        """True if a VM with this vmid currently exists on the node."""
+        try:
+            self.status(vm)
+            return True
+        except Exception:
+            return False
+
+    def destroy_if_exists(self, vm: GuestVM) -> bool:
+        """Remove a leftover VM at this vmid before a fresh clone.
+
+        Guards against a crashed/redelivered task (Celery `acks_late`) whose
+        clone was never torn down — cloning onto an existing vmid would
+        otherwise fail. Best-effort force-stop then delete; returns True if a
+        VM was found and deletion attempted.
+        """
+        if not self.exists(vm):
+            return False
+        try:
+            self.stop(vm, force=True)
+            self.wait_for_status(vm, "stopped", timeout=60)
+        except Exception:
+            pass  # fall through to delete regardless
+        self.destroy(vm)
+        return True
+
     # -- Status --------------------------------------------------------------
 
     def status(self, vm: GuestVM) -> str:

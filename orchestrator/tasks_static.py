@@ -272,6 +272,9 @@ def _clone_and_start(
     # reuse `proxmox_client.clone_from_template` directly because it pulls
     # template_vmid from settings.proxmox. Open-coded clone here keeps the
     # narrow ProxmoxClient surface untouched.
+    # Clear any leftover clone at this vmid from a crashed/redelivered run
+    # before cloning (B3).
+    client.destroy_if_exists(GuestVM(vmid=vmid, node=settings.proxmox.node))
     node = client._api.nodes(settings.proxmox.node)  # noqa: SLF001 — narrow API
     node.qemu(settings.linux_vm_pool.template_vmid).clone.post(
         newid=vmid,
@@ -281,7 +284,9 @@ def _clone_and_start(
     )
     vm = GuestVM(vmid=vmid, node=settings.proxmox.node)
     client.start(vm)
-    client.wait_for_status(vm, "running")
+    client.wait_for_status(
+        vm, "running", timeout=settings.proxmox.clone_boot_timeout_seconds
+    )
     return vm
 
 
