@@ -127,7 +127,10 @@ def create_app(
         try:
             report = ingest_submission(
                 data,
-                sample_name=upload.filename or request.form.get("name"),
+                # An explicit `name` form field overrides the upload filename
+                # (documented as such in reference/http-api.md); fall back to
+                # the multipart filename when it isn't supplied.
+                sample_name=request.form.get("name") or upload.filename,
                 store=resolved_store,
                 enqueue=resolved_enqueue,
                 staging_root=effective_staging_root,

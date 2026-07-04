@@ -135,6 +135,40 @@ def test_submit_accepts_sample(tmp_path: Path) -> None:
     assert staged.read_bytes() == b"A" * 64
 
 
+def test_submit_name_field_overrides_upload_filename(tmp_path: Path) -> None:
+    """The documented `name` form field overrides the multipart filename."""
+    client, store, _ = _client(tmp_path)
+    resp = client.post(
+        "/submit",
+        data={
+            "file": (io.BytesIO(b"A" * 64), "upload.exe"),
+            "name": "override.exe",
+        },
+        content_type="multipart/form-data",
+        headers={"X-API-Key": "secret-key"},
+    )
+    assert resp.status_code == 202
+    payload = resp.get_json()
+    job = next(iter(store.jobs.values()))
+    assert job.sample_name == "override.exe"
+    # Staged under the override name, not the upload filename.
+    staged = tmp_path / "staging" / "samples" / payload["analysis_id"] / "override.exe"
+    assert staged.exists()
+
+
+def test_submit_falls_back_to_upload_filename_without_name(tmp_path: Path) -> None:
+    client, store, _ = _client(tmp_path)
+    resp = client.post(
+        "/submit",
+        data={"file": (io.BytesIO(b"A" * 64), "upload.exe")},
+        content_type="multipart/form-data",
+        headers={"X-API-Key": "secret-key"},
+    )
+    assert resp.status_code == 202
+    job = next(iter(store.jobs.values()))
+    assert job.sample_name == "upload.exe"
+
+
 def test_submit_too_small_returns_400(tmp_path: Path) -> None:
     client, _, _ = _client(tmp_path)
     resp = client.post(

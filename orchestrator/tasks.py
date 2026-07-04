@@ -34,6 +34,7 @@ from pathlib import Path
 from uuid import UUID
 
 from celery import shared_task
+from celery.exceptions import Retry
 
 from .analyzer import AnalyzedBundle, analyze
 from .celery_app import app  # noqa: F401  — registers the Celery app on import
@@ -270,6 +271,14 @@ def analyze_malware_sample(
             "stix_count": len(bundle.stix_objects),
         }
 
+    except Retry:
+        # Celery control-flow signal from `self.retry` (raised on pool
+        # exhaustion above). It is NOT a failure — let it propagate so the
+        # task is rescheduled, and do not mark the job FAILED. On this path
+        # no vmid was acquired and no VM was cloned, so the finally is a
+        # no-op.
+        raise
+
     except GuestDriverError as exc:
         log.exception("Guest did not complete for job %s", job_id)
         _fail(job_id, f"guest_timeout: {exc}")
@@ -281,12 +290,24 @@ def analyze_malware_sample(
         raise
 
     finally:
+        # Disposable linked clone: hard-stop then delete so the vmid is free
+        # for the next lease. A fresh clone is created per job (born from the
+        # template's clean snapshot), so there is nothing to revert — the old
+        # revert-to-snapshot call was both wrong (clone has no such snapshot)
+        # and left the clone alive, colliding with the next job on this vmid.
+        # Both steps are best-effort; teardown must never mask the job's real
+        # outcome.
         if vm is not None:
             try:
-                client.revert_snapshot(vm)
-                log_event(AuditEvent(job_id, "vm_reverted", {"vmid": vm.vmid}))
+                client.stop(vm, force=True)
+                client.wait_for_status(vm, "stopped", timeout=60)
             except Exception:
-                log.exception("Failed to revert VM %s for job %s", vm.vmid, job_id)
+                log.exception("Failed to stop VM %s for job %s", vm.vmid, job_id)
+            try:
+                client.destroy(vm)
+                log_event(AuditEvent(job_id, "vm_destroyed", {"vmid": vm.vmid}))
+            except Exception:
+                log.exception("Failed to destroy VM %s for job %s", vm.vmid, job_id)
         if acquired_vmid is not None:
             try:
                 pool.release(acquired_vmid, job_id)

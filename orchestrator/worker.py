@@ -14,9 +14,14 @@ from .celery_app import app
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = argv or sys.argv[1:]
-    default_args = ["worker", "--loglevel=INFO", "--queues=analysis"]
-    app.worker_main(argv=argv or default_args)
+    args = list(argv) if argv is not None else sys.argv[1:]
+    if not args:
+        args = ["--loglevel=INFO", "--queues=analysis"]
+    # `worker_main` treats argv[0] as the subcommand, so "worker" must lead
+    # regardless of whether the caller passed extra flags. The previous code
+    # dropped it whenever any arg was supplied, so `sandgnat-worker --queues=x`
+    # misparsed the flag as the command name.
+    app.worker_main(argv=["worker", *args])
     return 0
 
 

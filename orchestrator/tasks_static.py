@@ -32,6 +32,7 @@ from pathlib import Path
 from uuid import UUID
 
 from celery import shared_task
+from celery.exceptions import Retry
 
 from .celery_app import app  # noqa: F401  — registers the Celery app on import
 from .config import get_settings
@@ -223,6 +224,12 @@ def static_analyze_sample(
             "status": "chained_to_detonation",
         }
 
+    except Retry:
+        # Celery control-flow signal from `self.retry` (pool exhaustion).
+        # Not a failure — propagate for rescheduling without marking the job
+        # FAILED. No vmid acquired / VM cloned on this path, so finally is a
+        # no-op.
+        raise
     except GuestDriverError as exc:
         log.exception("Linux guest did not complete for job %s", job_id)
         _fail(job_id, f"static_guest_timeout: {exc}")
@@ -232,12 +239,21 @@ def static_analyze_sample(
         _fail(job_id, f"static_failed: {exc}")
         raise
     finally:
+        # Disposable linked clone: hard-stop then delete so the vmid is free
+        # for the next lease. Fresh clone per job (born from the clean
+        # snapshot), so there is nothing to revert. Best-effort; teardown
+        # must never mask the job's real outcome.
         if vm is not None:
             try:
-                client.revert_snapshot(vm, snapshot=settings.linux_vm_pool.clean_snapshot)
-                log_event(AuditEvent(job_id, "linux_vm_reverted", {"vmid": vm.vmid}))
+                client.stop(vm, force=True)
+                client.wait_for_status(vm, "stopped", timeout=60)
             except Exception:
-                log.exception("Failed to revert Linux VM %s for job %s", vm.vmid, job_id)
+                log.exception("Failed to stop Linux VM %s for job %s", vm.vmid, job_id)
+            try:
+                client.destroy(vm)
+                log_event(AuditEvent(job_id, "linux_vm_destroyed", {"vmid": vm.vmid}))
+            except Exception:
+                log.exception("Failed to destroy Linux VM %s for job %s", vm.vmid, job_id)
         if acquired_vmid is not None:
             try:
                 pool.release(acquired_vmid, job_id)
