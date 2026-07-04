@@ -113,14 +113,14 @@ into its database directly.
   <div class="gnat-card gnat-card-red">
     <span class="gnat-card-tag">Addon</span>
     <h3>RedGNAT</h3>
-    <p>Continuous automated red teaming — ingests threat intel, constructs adversary emulation scenarios, executes them with safety controls.</p>
+    <p>Continuous automated readiness testing — ingests threat intel, constructs adversary emulation scenarios, executes them with safety controls.</p>
     <a class="gnat-card-link gnat-link-red" href="https://wrhalpin.github.io/RedGNAT/">Learn more</a>
   </div>
 
   <div class="gnat-card gnat-card-sense">
     <span class="gnat-card-tag">Addon</span>
     <h3>SenseGNAT</h3>
-    <p>Network sensor + honeypot telemetry. High-volume Kafka ingestion, Redis dedupe, automatic campaign linking back into GNAT.</p>
+    <p>Network profiling and behavior analysis that surfaces anomalies and enriches GNAT investigations with traffic-layer context using network sensor and honeypot telemetry — high-volume ingestion from Kafka topics, Redis dedup, automatic campaign linking.</p>
     <a class="gnat-card-link gnat-link-sense" href="https://wrhalpin.github.io/SenseGNAT/">Learn more</a>
   </div>
 
