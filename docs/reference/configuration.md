@@ -30,7 +30,8 @@ Canonical source: `orchestrator/config.py`.
 | `PROXMOX_VERIFY_SSL`     | `true`      |          | TLS verification                     |
 | `PROXMOX_NODE`           | —           | ✅       | Proxmox node to place VMs on         |
 | `PROXMOX_TEMPLATE_VMID`  | `9000`      |          | Windows template vmid                |
-| `PROXMOX_CLEAN_SNAPSHOT` | `clean`     |          | Snapshot name to revert to           |
+| `PROXMOX_CLEAN_SNAPSHOT` | `clean`     |          | Template snapshot to linked-clone from |
+| `PROXMOX_CLONE_BOOT_TIMEOUT_SECONDS` | `120` |      | Max wait for a fresh clone to reach `running` |
 
 ## Windows VM pool
 
@@ -98,10 +99,23 @@ individual mitigations without rebuilding the frozen agent.
 
 | Variable                    | Default                                                                 | Purpose                                                    |
 |-----------------------------|-------------------------------------------------------------------------|------------------------------------------------------------|
-| `SANDGNAT_DECOY_USER`       | `%USERNAME%`                                                            | Username whose AppData holds the workspace                 |
+| `SANDGNAT_DECOY_USER`       | value of `USERNAME`, else `Default`                                    | Username whose AppData holds the workspace (read literally, not `%`-expanded) |
 | `SANDGNAT_WORK_ROOT`        | `C:\Users\<decoy>\AppData\Local\Microsoft\PowerManagement`              | Per-job workspace root on the guest                        |
 | `SANDGNAT_STAGING_ROOT`     | `\\192.168.100.1\analysis`                                              | UNC path to the orchestrator staging share (no drive letter) |
 | `SANDGNAT_PROCMON`          | `C:\Windows\System32\SystemAudit.exe`                                   | Renamed ProcMon binary                                     |
+
+### Capture tools (Phase C)
+
+Point these at the tool binaries and NIC on your template. If Wireshark
+or Regshot live elsewhere, or the capture NIC isn't named `Ethernet`,
+capture silently fails without these overrides.
+
+| Variable                     | Default                                          | Purpose                                              |
+|------------------------------|--------------------------------------------------|------------------------------------------------------|
+| `SANDGNAT_TSHARK`            | `C:\Program Files\Wireshark\tshark.exe`          | tshark binary for PCAP capture                       |
+| `SANDGNAT_REGSHOT`           | `C:\Tools\Regshot\Regshot-x64-Unicode.exe`       | Regshot binary for the registry before/after diff    |
+| `SANDGNAT_CAPTURE_INTERFACE` | `Ethernet`                                        | NIC name tshark captures on                          |
+| `SANDGNAT_POLL_INTERVAL`     | `2.0`                                             | Seconds between staging-share polls in the watcher   |
 
 ### Activity simulator (Phase D)
 

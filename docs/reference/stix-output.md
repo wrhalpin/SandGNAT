@@ -134,7 +134,7 @@ One per distinct PID observed in ProcMon.
   "created_time": "2026-04-17T12:00:00.000000Z",
   "binary_ref": "file--...",            // if name ends .exe
   "parent_ref": "process--...",          // when known
-  "child_process_refs": ["process--..."],
+  "child_refs": ["process--..."],        // STIX 2.1 standard process children
   "x_registry_modifications": [
     {
       "action": "set_value",
@@ -173,12 +173,14 @@ One per distinct flow in the PCAP.
 }
 ```
 
-`src_ref`/`dst_ref` point at `ipv4-addr` (or `ipv6-addr`, or
-`domain-name`) SCOs emitted alongside.
+`src_ref`/`dst_ref` point at `ipv4-addr` SCOs emitted alongside (see
+below). IPv6 and `domain-name` endpoints are not yet built — every flow
+endpoint is currently modelled as an `ipv4-addr`.
 
 `x_http_headers` only present when the PCAP parser recovers them.
 
-Natural key: `src_ip:src_port -> dst_ip:dst_port + protocol`.
+Natural key: `{src_ref}->{dst_ref}:{dst_port}@{start}` (the STIX
+address-object ids, plus destination port and flow start time).
 
 ## Indicator SDO
 
@@ -194,7 +196,6 @@ confirmed network IOC.
   "modified": "...",
   "pattern": "[windows-registry-key:key = 'HKLM\\Software\\...']",
   "pattern_type": "stix",
-  "pattern_version": "2.1",
   "valid_from": "...",
   "labels": ["malicious-activity", "persistence"],
   "kill_chain_phases": [
@@ -215,10 +216,10 @@ Two pattern classes we emit:
 making the graph explicit without requiring full STIX `relationship`
 SDOs.
 
-## ipv4-addr / ipv6-addr / domain-name SCOs
+## ipv4-addr SCO
 
-Compact observables, emitted alongside `network-traffic` when the
-PCAP parser sees them.
+Compact observable, emitted (and deduped) for each `network-traffic`
+flow endpoint so `src_ref`/`dst_ref` resolve within the bundle.
 
 ```json
 {
@@ -230,23 +231,19 @@ PCAP parser sees them.
 }
 ```
 
-Natural key: the address value.
-
-## directory SCO
-
-Rare but possible: emitted when dropped-file paths include a previously
-unseen intermediate directory. Natural key: the path as a string.
+Natural key: the address value. (`ipv6-addr` and `domain-name` SCOs are
+not currently built.)
 
 ## Bundle assembly
 
 `persistence.export_bundle(analysis_id)` SELECTs every STIX row for the
-analysis and hands them to `stix_builder.build_bundle`:
+analysis and hands them to `stix_builder.build_bundle`. Any investigation
+`grouping` is lifted to the front of `objects[]`:
 
 ```json
 {
   "type": "bundle",
   "id": "bundle--<uuid>",
-  "spec_version": "2.1",
   "objects": [ ... every SDO + SCO + indicator for the analysis_id ... ]
 }
 ```

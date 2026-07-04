@@ -57,24 +57,40 @@ def run_capa(
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         return {"available": True, "skipped": True, "reason": f"capa json parse failed: {exc}"}
 
+    return {
+        "available": True,
+        "skipped": False,
+        "capabilities": parse_capa_report(report),
+    }
+
+
+def parse_capa_report(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten a capa `--json` result document into capability dicts.
+
+    Pure function over the parsed JSON so it's unit-testable without the
+    capa binary. capa's result document spells the ATT&CK list `attack`
+    (not `attck`) and, since capa 6, replaced the string `scope` with the
+    object `scopes` ({static, dynamic}). Both current keys are read with a
+    fallback to the legacy names so either capa version populates correctly.
+    """
     capabilities: list[dict[str, Any]] = []
     rules = report.get("rules") or {}
     for rule_name, rule in rules.items():
         meta = rule.get("meta") or {}
-        attck = meta.get("attck") or []
+        attack = meta.get("attack") or []
         capabilities.append(
             {
                 "rule": rule_name,
                 "namespace": meta.get("namespace"),
-                "scope": meta.get("scope"),
+                "scope": meta.get("scopes") or meta.get("scope"),
                 "attack": [
                     {
                         "tactic": (a or {}).get("tactic"),
                         "technique": (a or {}).get("technique"),
                         "id": (a or {}).get("id"),
                     }
-                    for a in attck
+                    for a in attack
                 ],
             }
         )
-    return {"available": True, "skipped": False, "capabilities": capabilities}
+    return capabilities

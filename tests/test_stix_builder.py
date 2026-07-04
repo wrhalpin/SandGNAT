@@ -63,8 +63,20 @@ def test_build_malware_links_object_refs() -> None:
 
 def test_build_process_optional_fields_omitted_when_empty() -> None:
     proc = build_process(ANALYSIS_ID, pid=1234, name="sample.exe")
-    assert "x_child_process_refs" not in proc
+    assert "child_refs" not in proc
     assert "x_registry_modifications" not in proc
+
+
+def test_build_process_uses_standard_child_refs() -> None:
+    proc = build_process(
+        ANALYSIS_ID,
+        pid=1234,
+        name="sample.exe",
+        child_process_refs=["process--aaaa", "process--bbbb"],
+    )
+    # STIX 2.1 standard property, not the old custom x_child_process_refs.
+    assert proc["child_refs"] == ["process--aaaa", "process--bbbb"]
+    assert "x_child_process_refs" not in proc
 
 
 def test_build_indicator_includes_pattern_type() -> None:
@@ -74,4 +86,7 @@ def test_build_indicator_includes_pattern_type() -> None:
         kill_chain_phase="persistence",
     )
     assert indicator["pattern_type"] == "stix"
-    assert indicator["kill_chain_phases"][0]["phase_name"] == "persistence"
+    phase = indicator["kill_chain_phases"][0]
+    assert phase["phase_name"] == "persistence"
+    # ATT&CK-tactic phase names require the mitre-attack chain name.
+    assert phase["kill_chain_name"] == "mitre-attack"

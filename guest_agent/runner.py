@@ -119,11 +119,14 @@ def run_job(manifest: JobManifest, config: GuestConfig, workspace: Path) -> Resu
     watched_roots = [Path(p) for p in manifest.capture.dropped_file_roots]
     baseline_inventory = snapshot_roots(watched_roots)
 
-    # 4. Spin up the user-activity simulator (Phase D). The warmup
-    # window inside the simulator delays real input until a GUI-driven
-    # installer has moved past its first prompt.
+    # 4. Spin up the user-activity simulator (Phase D), unless this job
+    # opted out via CaptureConfig.suppress_activity — set for GUI-driven
+    # samples whose own installer clicks would collide with synthetic
+    # input. The warmup window inside the simulator delays real input until
+    # a GUI installer has moved past its first prompt.
     simulator = ActivitySimulator(load_activity_config())
-    simulator.start()
+    if not manifest.capture.suppress_activity:
+        simulator.start()
 
     # 5. Prepare Phase-E sleep-patch injection. The DLL lives next to
     # the frozen agent; if it's missing, we log and press on — Phase G

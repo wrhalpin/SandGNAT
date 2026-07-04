@@ -9,6 +9,7 @@ STIX objects and normalised rows.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
 
@@ -184,3 +185,52 @@ def test_analyze_flags_persistence_indicator(tmp_path: Path) -> None:
     # Normalised registry-modifications rows should also flag persistence.
     persistent_rows = [r for r in bundle.registry_modifications if r.persistence_indicator]
     assert persistent_rows
+
+
+def test_analyze_emits_ipv4_addr_scos_so_network_refs_resolve(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Regression: network-traffic SCOs must not reference ipv4-addr objects
+    that are absent from the bundle (dangling src_ref/dst_ref => invalid graph)."""
+    from orchestrator.parsers import pcap as pcap_mod
+    from orchestrator.parsers.pcap import PcapFlow
+
+    flow = PcapFlow(
+        src_ip="192.168.100.50",
+        dst_ip="93.184.216.34",
+        src_port=51000,
+        dst_port=443,
+        protocol="tcp",
+        start=1_700_000_000.0,
+        end=1_700_000_001.0,
+        packets=10,
+        bytes_=4096,
+        dns_queries=["example.com"],
+    )
+    monkeypatch.setattr(pcap_mod, "parse_pcap", lambda _path: [flow])
+
+    artifacts = _build_fixture(tmp_path)
+    artifacts = replace(artifacts, pcap=artifacts.workspace / "capture.pcap")
+
+    bundle = analyze(
+        analysis_id=ANALYSIS_ID,
+        sample_name="sample.exe",
+        sample_sha256=SAMPLE_SHA,
+        sample_md5=None,
+        artifacts=artifacts,
+        quarantine_root=tmp_path / "quarantine",
+    )
+
+    objs_by_id = {o["id"]: o for o in bundle.stix_objects}
+    net_objs = [o for o in bundle.stix_objects if o["type"] == "network-traffic"]
+    assert net_objs, "expected a network-traffic SCO"
+    for o in net_objs:
+        assert o["src_ref"] in objs_by_id, "src_ref dangles"
+        assert o["dst_ref"] in objs_by_id, "dst_ref dangles"
+        assert objs_by_id[o["src_ref"]]["type"] == "ipv4-addr"
+        assert objs_by_id[o["dst_ref"]]["type"] == "ipv4-addr"
+
+    # One flow with two distinct endpoints => exactly two address SCOs (deduped).
+    addrs = [o for o in bundle.stix_objects if o["type"] == "ipv4-addr"]
+    assert len(addrs) == 2
+    assert {a["value"] for a in addrs} == {"192.168.100.50", "93.184.216.34"}

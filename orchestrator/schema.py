@@ -69,6 +69,12 @@ class CaptureConfig:
     procmon: bool = True
     tshark: bool = True
     regshot: bool = True
+    # Per-job opt-out for the Phase-D user-activity simulator. Set True for
+    # known GUI-driven samples whose own installer/clicks would collide with
+    # synthetic input. Additive optional field (default False) — old manifests
+    # that omit it parse unchanged; the detonation guest must be re-frozen to
+    # honour it.
+    suppress_activity: bool = False
     # Directories on the guest to scan for dropped files.
     dropped_file_roots: list[str] = field(
         default_factory=lambda: [

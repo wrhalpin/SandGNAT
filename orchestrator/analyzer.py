@@ -32,6 +32,7 @@ from .stix_builder import (
     build_file,
     build_indicator,
     build_investigation_grouping,
+    build_ipv4_addr,
     build_malware,
     build_network_traffic,
     build_process,
@@ -166,8 +167,18 @@ def analyze(
             except Exception:  # noqa: BLE001 — scapy can raise many things on bad pcaps
                 log.exception("PCAP parse failed; continuing without network IOCs")
                 flows = []
+            seen_addr_ids: set[str] = set()
             for flow in flows:
                 net_obj, iocs = _flow_to_stix_and_iocs(analysis_id, flow)
+                # Emit the ipv4-addr SCOs the network-traffic object refers
+                # to; without them src_ref/dst_ref dangle and the bundle is
+                # an invalid graph. Dedupe by id — the guest IP and any
+                # repeated peer recur across every flow.
+                for ip in (flow.src_ip, flow.dst_ip):
+                    addr = build_ipv4_addr(analysis_id, ip)
+                    if addr["id"] not in seen_addr_ids:
+                        seen_addr_ids.add(addr["id"])
+                        bundle.stix_objects.append(addr)
                 bundle.stix_objects.append(net_obj)
                 bundle.network_iocs.extend(iocs)
 

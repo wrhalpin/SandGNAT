@@ -44,6 +44,10 @@ static = [
     "ssdeep>=3.4",
     "python-tlsh>=4.5",
     "capstone>=5.0",
+    # Deep-YARA scanning on the guest. Without this the static stage's YARA
+    # step silently returns zero matches, which also blanks the Phase-G
+    # yara_anti_vm evasion signal.
+    "yara-python>=4.5",
 ]
 
 [project.scripts]
